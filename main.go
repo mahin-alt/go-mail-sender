@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"net/smtp"
-	"github.com/joho/godotenv"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 
@@ -45,5 +48,16 @@ func main() {
 		return
 	} 
 
-	sendMailSimple("Arekta subject", "Arekta body", []string{"mahin.zavisoft@gmail.com"})
+	// sendMailSimple("Arekta subject", "Arekta body", []string{"mahin.zavisoft@gmail.com"})
+	http.HandleFunc("/", GetRoot)
+	http.HandleFunc("/hello", GetHello)
+
+	err = http.ListenAndServe(":3333", nil)
+
+	if errors.Is(err, http.ErrServerClosed) {
+		fmt.Printf("Server closed\n")
+	} else if err != nil {
+		fmt.Printf("Error starting server: %s\n", err)
+		os.Exit(1)
+	} 
 }
