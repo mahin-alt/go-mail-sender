@@ -49,6 +49,8 @@ func main() {
 	} 
 
 	// sendMailSimple("Arekta subject", "Arekta body", []string{"mahin.zavisoft@gmail.com"})
+
+	// Default server multiplexer and default HTTP server
 	http.HandleFunc("/", GetRoot)
 	http.HandleFunc("/hello", GetHello)
 
