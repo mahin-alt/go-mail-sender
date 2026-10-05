@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -51,15 +52,20 @@ func main() {
 	// sendMailSimple("Arekta subject", "Arekta body", []string{"mahin.zavisoft@gmail.com"})
 
 	// Default server multiplexer and default HTTP server
-	http.HandleFunc("/", GetRoot)
-	http.HandleFunc("/hello", GetHello)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", GetRoot)
+	mux.HandleFunc("/hello", GetHello)
 
-	err = http.ListenAndServe(":3333", nil)
+	// err = http.ListenAndServe(":3333", mux)
 
-	if errors.Is(err, http.ErrServerClosed) {
-		fmt.Printf("Server closed\n")
-	} else if err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
-		os.Exit(1)
-	} 
+	// if errors.Is(err, http.ErrServerClosed) {
+	// 	fmt.Printf("Server closed\n")
+	// } else if err != nil {
+	// 	fmt.Printf("Error starting server: %s\n", err)
+	// 	os.Exit(1)
+	// } 
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	serverOne := &http.Server{
+		A
+	}
 }
