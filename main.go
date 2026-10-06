@@ -13,7 +13,7 @@ import (
 )
 
 
-func sendMailSimple(subject string, body string, to []string){
+func sendMailSimple(subject string, body string, to []string) error {
 	username := os.Getenv("FROM_EMAIL")
 	password := os.Getenv("FROM_EMAIL_PASSWORD")
 	host := os.Getenv("SMTP_HOST")
@@ -26,10 +26,11 @@ func sendMailSimple(subject string, body string, to []string){
 		host,
 	)
 
-	msg := "Subject: " + subject + "\n" + body
+	// A blank line separates the email headers from the message body.
+	msg := "Subject: " + subject + "\r\n\r\n" + body
 
 	err := smtp.SendMail(
-		host + ":" + port,
+		net.JoinHostPort(host, port),
 		auth,
 		username,
 		to,
@@ -37,10 +38,10 @@ func sendMailSimple(subject string, body string, to []string){
 	)
 
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 
+	return nil
 }
 
 func main() {
@@ -56,6 +57,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", GetRoot)
 	mux.HandleFunc("/hello", GetHello)
+	// Example: POST /send-mail with {"subject":"Hi","body":"Hello","to":["you@example.com"]}.
+	mux.HandleFunc("/send-mail", SendMail)
 
 	// err = http.ListenAndServe(":3333", mux)
 
