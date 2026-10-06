@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/smtp"
 	"os"
@@ -63,9 +64,52 @@ func main() {
 	// } else if err != nil {
 	// 	fmt.Printf("Error starting server: %s\n", err)
 	// 	os.Exit(1)
-	// } 
+	// }
+
+	// This context is application/server level context and background is empty initial context with no deadlines, cancel, cause etc
+	//   
 	ctx, cancelCtx := context.WithCancel(context.Background())
+	// Server one
 	serverOne := &http.Server{
-		A
+		Addr: ":3333",
+		Handler: mux,
+		BaseContext: func(l net.Listener) context.Context {
+			ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
+			return ctx
+		},
 	}
+
+	// Server two
+	serverTwo := &http.Server{
+		Addr: ":4444",
+		Handler: mux,
+		BaseContext: func(l net.Listener) context.Context{
+			ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
+			return ctx
+		},
+	}
+
+	go func ()  {
+		err := serverOne.ListenAndServe()
+
+		if errors.Is(err, http.ErrServerClosed) {
+			fmt.Printf("Server one closed\n")
+		} else if err != nil {
+			fmt.Printf("error listening for server one: %s\n", err)
+		}
+
+		cancelCtx()
+	}()
+
+	  go func() {
+        err := serverTwo.ListenAndServe()
+        if errors.Is(err, http.ErrServerClosed) {
+            fmt.Printf("server two closed\n")
+        } else if err != nil {
+            fmt.Printf("error listening for server two: %s\n", err)
+        }
+        cancelCtx()
+    }()
+	<-ctx.Done()
+
 }
