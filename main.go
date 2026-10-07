@@ -56,15 +56,10 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", GetRoot)
 	mux.HandleFunc("/hello", GetHello)
-
-	// err = http.ListenAndServe(":3333", mux)
-
-	// if errors.Is(err, http.ErrServerClosed) {
-	// 	fmt.Printf("Server closed\n")
-	// } else if err != nil {
-	// 	fmt.Printf("Error starting server: %s\n", err)
-	// 	os.Exit(1)
-	// }
+	
+	// Middle ware
+	
+	loggedMux := LoggingMiddleware(mux)
 
 	// This context is application/server level context and background is empty initial context with no deadlines, cancel, cause etc
 	//   
@@ -72,7 +67,7 @@ func main() {
 	// Server one
 	serverOne := &http.Server{
 		Addr: ":3333",
-		Handler: mux,
+		Handler: loggedMux,
 		BaseContext: func(l net.Listener) context.Context {
 			ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
 			return ctx
@@ -80,14 +75,14 @@ func main() {
 	}
 
 	// Server two
-	serverTwo := &http.Server{
-		Addr: ":4444",
-		Handler: mux,
-		BaseContext: func(l net.Listener) context.Context{
-			ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
-			return ctx
-		},
-	}
+	// serverTwo := &http.Server{
+	// 	Addr: ":4444",
+	// 	Handler: mux,
+	// 	BaseContext: func(l net.Listener) context.Context{
+	// 		ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
+	// 		return ctx
+	// 	},
+	// }
 
 	go func ()  {
 		err := serverOne.ListenAndServe()
@@ -101,15 +96,15 @@ func main() {
 		cancelCtx()
 	}()
 
-	  go func() {
-        err := serverTwo.ListenAndServe()
-        if errors.Is(err, http.ErrServerClosed) {
-            fmt.Printf("server two closed\n")
-        } else if err != nil {
-            fmt.Printf("error listening for server two: %s\n", err)
-        }
-        cancelCtx()
-    }()
+	//   go func() {
+    //     err := serverTwo.ListenAndServe()
+    //     if errors.Is(err, http.ErrServerClosed) {
+    //         fmt.Printf("server two closed\n")
+    //     } else if err != nil {
+    //         fmt.Printf("error listening for server two: %s\n", err)
+    //     }
+    //     cancelCtx()
+    // }()
 	<-ctx.Done()
 
 }
