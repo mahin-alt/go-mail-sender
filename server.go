@@ -26,8 +26,7 @@ func GetHello(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "Hello, HTTP!\n")
 }
 
-// SendMail accepts a JSON request and sends the email using the SMTP settings
-// from the environment.
+// SendMail accepts a JSON request and sends the email through Mailtrap.
 func SendMail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -35,7 +34,6 @@ func SendMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The JSON shape mirrors the arguments needed by sendMailSimple.
 	var request struct {
 		Subject string   `json:"subject"`
 		Body    string   `json:"body"`
@@ -68,7 +66,7 @@ func SendMail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := sendMailSimple(request.Subject, request.Body, request.To); err != nil {
+	if err := sendMailSimple(r.Context(), request.Subject, request.Body, request.To); err != nil {
 		fmt.Printf("email send error: %v\n", err)
 		http.Error(w, "Could not send email", http.StatusBadGateway)
 		return
