@@ -2,6 +2,7 @@ package recipients
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -70,3 +71,23 @@ func TestParseExcelMissingFile(t *testing.T) {
 		t.Error("expected an error for a missing file")
 	}
 }
+
+func TestParseExcelReader(t *testing.T) {
+	f, err := os.Open(filepath.Join("..", "..", "samples", "1_valid.xlsx"))
+	if err != nil {
+		t.Fatalf("open sample file: %v", err)
+	}
+	defer f.Close()
+
+	valid, problems, err := ParseExcelReader(f)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(valid) != 5 {
+		t.Errorf("valid = %d, want 5", len(valid))
+	}
+	if len(problems) != 0 {
+		t.Errorf("problems = %d, want 0", len(problems))
+	}
+}
+

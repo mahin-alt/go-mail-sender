@@ -11,17 +11,21 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/mail"
 	"strings"
 
 	"sendmail/internal/mailer"
+	"sendmail/internal/recipients"
 )
 
-// maxBodyBytes caps how much of a request body we will read, so a client
-// can't exhaust our memory by streaming gigabytes at us.
-const maxBodyBytes = 1 << 20 // 1 MB
+// Limits on request bodies to prevent resource exhaustion.
+const (
+	maxBodyBytes   = 1 << 20  // 1 MB for JSON payloads
+	maxUploadBytes = 10 << 20 // 10 MB for file uploads
+)
 
 // Handler holds the dependencies our HTTP handlers need.
 //
@@ -96,6 +100,58 @@ func (h *Handler) SendEmail(w http.ResponseWriter, r *http.Request) {
 	// We send synchronously, so by now the mail was accepted by the SMTP
 	// server: 200 OK. (If we queued it for later we'd return 202 Accepted.)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "email sent"})
+}
+
+// parseRecipientsResponse is the response shape for POST /api/v1/recipients/parse.
+type parseRecipientsResponse struct {
+	Valid    []recipients.Recipient `json:"valid"`
+	Problems []recipients.RowError  `json:"problems"`
+}
+
+// ParseRecipients handles POST /api/v1/recipients/parse and accepts an uploaded .xlsx file.
+func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
+	// 1. DECODE & LIMIT -------------------------------------------------
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+
+	// Keep up to 5 MB in memory before spilling to temporary files on disk
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid multipart form: "+err.Error())
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, `form field "file" is required`)
+		return
+	}
+	defer file.Close()
+
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
+		writeError(w, http.StatusBadRequest, "only .xlsx files are supported")
+		return
+	}
+
+	// 2. ACT / PARSE ----------------------------------------------------
+	valid, problems, err := recipients.ParseExcelReader(file)
+	if err != nil {
+		if errors.Is(err, recipients.ErrMissingColumns) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to parse excel file: %v", err))
+		return
+	}
+
+	// 3. RESPOND --------------------------------------------------------
+	writeJSON(w, http.StatusOK, parseRecipientsResponse{
+		Valid:    valid,
+		Problems: problems,
+	})
 }
 
 // validate returns a human-readable problem, or "" if the request is fine.

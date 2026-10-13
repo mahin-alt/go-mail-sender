@@ -16,6 +16,7 @@ package recipients
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/mail"
 	"strings"
 
@@ -24,15 +25,15 @@ import (
 
 // Recipient is one person we will send an email to.
 type Recipient struct {
-	Name  string
-	Email string
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 // RowError describes one row we could not use. It is DATA, not a failure of
 // the whole run: a bad row should not stop the good rows from being sent.
 type RowError struct {
-	Row    int    // the row number as shown in Excel (header is row 1)
-	Reason string // human readable explanation
+	Row    int    `json:"row"`    // the row number as shown in Excel (header is row 1)
+	Reason string `json:"reason"` // human readable explanation
 }
 
 // Error makes RowError satisfy Go's built-in `error` interface (any type with
@@ -63,10 +64,24 @@ func ParseExcel(path string) ([]Recipient, []RowError, error) {
 		// errors.Is / errors.As, while we add context about what we were doing.
 		return nil, nil, fmt.Errorf("open excel file: %w", err)
 	}
-	// Concept: `defer` runs when the function returns, however it returns.
-	// Always close what you open so file handles aren't leaked.
 	defer f.Close()
 
+	return parseFile(f)
+}
+
+// ParseExcelReader reads an Excel document from r and returns the usable recipients
+// plus the rows that were rejected.
+func ParseExcelReader(r io.Reader) ([]Recipient, []RowError, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open excel file: %w", err)
+	}
+	defer f.Close()
+
+	return parseFile(f)
+}
+
+func parseFile(f *excelize.File) ([]Recipient, []RowError, error) {
 	sheets := f.GetSheetList()
 	if len(sheets) == 0 {
 		return nil, nil, errors.New("excel file has no sheets")
@@ -89,14 +104,9 @@ func ParseExcel(path string) ([]Recipient, []RowError, error) {
 		return nil, nil, ErrMissingColumns
 	}
 
-	var (
-		valid    []Recipient
-		problems []RowError
-		// A map used as a set: we've already accepted this email address.
-		// (Go has no Set type; map[T]struct{} is the idiom because an empty
-		// struct takes zero bytes.)
-		seen = make(map[string]struct{})
-	)
+	valid := make([]Recipient, 0)
+	problems := make([]RowError, 0)
+	seen := make(map[string]struct{})
 
 	// rows[0] is the header, so data starts at index 1.
 	for i := 1; i < len(rows); i++ {
@@ -111,24 +121,24 @@ func ParseExcel(path string) ([]Recipient, []RowError, error) {
 			continue
 		}
 		if email == "" {
-			problems = append(problems, RowError{rowNum, "email is empty"})
+			problems = append(problems, RowError{Row: rowNum, Reason: "email is empty"})
 			continue
 		}
 		if name == "" {
 			// Policy choice: we require a name. If you'd rather email people
 			// without one, remove this check and use a fallback greeting.
-			problems = append(problems, RowError{rowNum, "name is empty"})
+			problems = append(problems, RowError{Row: rowNum, Reason: "name is empty"})
 			continue
 		}
 		if !validEmail(email) {
-			problems = append(problems, RowError{rowNum, fmt.Sprintf("invalid email %q", email)})
+			problems = append(problems, RowError{Row: rowNum, Reason: fmt.Sprintf("invalid email %q", email)})
 			continue
 		}
 
 		// Email addresses are case-insensitive in practice, so compare lowercase.
 		email = strings.ToLower(email)
 		if _, dup := seen[email]; dup {
-			problems = append(problems, RowError{rowNum, fmt.Sprintf("duplicate email %q", email)})
+			problems = append(problems, RowError{Row: rowNum, Reason: fmt.Sprintf("duplicate email %q", email)})
 			continue
 		}
 		seen[email] = struct{}{}
