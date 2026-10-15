@@ -115,13 +115,6 @@ func TestParseRecipients(t *testing.T) {
 		}
 	})
 
-	t.Run("upload alias route", func(t *testing.T) {
-		rec := postFile("/api/v1/recipients/upload", filepath.Join("..", "..", "samples", "1_valid.xlsx"), "1_valid.xlsx", "file")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body)
-		}
-	})
-
 	t.Run("missing form field", func(t *testing.T) {
 		rec := postFile("/api/v1/recipients/parse", "", "", "")
 		if rec.Code != http.StatusBadRequest {

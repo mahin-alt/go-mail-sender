@@ -21,7 +21,6 @@ func NewRouter(h *Handler) http.Handler {
 
 	// Excel parsing routes: accept an uploaded .xlsx file and return parsed recipients.
 	mux.HandleFunc("POST /api/v1/recipients/parse", h.ParseRecipients)
-	mux.HandleFunc("POST /api/v1/recipients/upload", h.ParseRecipients)
 
 	return mux
 }
