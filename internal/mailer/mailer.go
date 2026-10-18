@@ -23,7 +23,8 @@ type Mailer interface {
 	Send(to, subject, body string) error
 }
 
-// SMTPMailer is the real implementation, speaking SMTP via the standard library.
+// SMTPMailer is the single-shot implementation, speaking SMTP via the standard library.
+// For higher throughput and connection reuse, see Pool in pool.go.
 type SMTPMailer struct {
 	cfg config.Config
 }
@@ -36,26 +37,19 @@ func NewSMTPMailer(cfg config.Config) *SMTPMailer {
 
 // Send delivers a plain-text email from the configured sender to `to`.
 func (m *SMTPMailer) Send(to, subject, body string) error {
-	// PlainAuth builds the username/password credentials for SMTP AUTH.
-	// (First arg "identity" is almost always empty. The host is passed so
-	// the library refuses to send the password over an unencrypted
-	// connection to the wrong server.)
-	auth := smtp.PlainAuth("", m.cfg.SMTPUsername, m.cfg.SMTPPassword, m.cfg.SMTPHost)
+	var auth smtp.Auth
+	// Only supply authentication if credentials are provided (Mailtrap/prod).
+	// When using Mailpit on localhost without credentials, leave auth as nil.
+	if m.cfg.SMTPUsername != "" && m.cfg.SMTPPassword != "" {
+		auth = smtp.PlainAuth("", m.cfg.SMTPUsername, m.cfg.SMTPPassword, m.cfg.SMTPHost)
+	}
 
 	// An email is just text: headers, a blank line, then the body.
 	// SMTP requires "\r\n" (CRLF) line endings.
 	// NOTE: `subject` and `to` are put straight into headers, so they must
 	// not contain "\r\n" - otherwise a caller could inject extra headers
 	// (e.g. a hidden Bcc). The API layer validates this before calling us.
-	message := []byte(
-		"From: " + m.cfg.MailFrom + "\r\n" +
-			"To: " + to + "\r\n" +
-			"Subject: " + subject + "\r\n" +
-			"MIME-Version: 1.0\r\n" +
-			"Content-Type: text/plain; charset=UTF-8\r\n" +
-			"\r\n" +
-			body + "\r\n",
-	)
+	message := buildMessage(m.cfg.MailFrom, to, subject, body)
 
 	// SendMail connects, authenticates (upgrading to TLS via STARTTLS when
 	// the server offers it), sends the message, and disconnects.

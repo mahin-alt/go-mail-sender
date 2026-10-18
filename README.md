@@ -1,91 +1,118 @@
 # go-mail-sender
 
-A tiny HTTP API that sends email over SMTP (Mailtrap sandbox in development). Standard library only, plus `godotenv`.
+An asynchronous, scalable email processing API in Go. Accepts Excel files (`.xlsx`), parses recipients, renders personalized greetings via Go templates, and dispatches emails using background Go worker goroutines backed by PostgreSQL (`FOR UPDATE SKIP LOCKED`) and a connection-pooled SMTP engine (Mailpit / Mailtrap / production).
 
-## Run it
+## Features
+
+- **Excel Parsing**: Automatically extracts recipient names and emails from `.xlsx` files with row-level validation.
+- **Batches & Bulk Jobs**: Upload an Excel file to create a single Batch with individual, trackable email jobs.
+- **Personalized Templating**: Uses Go's `text/template` engine to customize subjects and bodies with `{{.Name}}` and `{{.Email}}`.
+- **PostgreSQL Job Queue**: Concurrency-safe job claiming using `SELECT ... FOR UPDATE SKIP LOCKED` (no duplicate sends, no lock contention).
+- **SMTP Connection Pool**: Configurable persistent connection pool to reuse SMTP connections and protect mail servers from socket exhaustion.
+- **Configurable Concurrency**: Tune worker count, pool size, and poll interval via `.env`.
+- **Local Mailpit & Mailtrap Support**: Seamlessly works with local Mailpit (no auth required) or Mailtrap/production.
+- **Graceful Shutdown**: On `SIGINT` / `SIGTERM`, finishes in-flight emails, drains worker pools, and closes connections cleanly.
+
+---
+
+## Quickstart
+
+### 1. Prerequisites
+- **PostgreSQL** running locally on port 5432 (database named `sendmail` or custom `DATABASE_URL`).
+- **Mailpit** running on port 1025 (or Mailtrap sandbox).
+
+### 2. Configure & Run
 
 ```bash
-cp .env.example .env   # fill in your Mailtrap credentials
+cp .env.example .env
+# Edit .env with your DATABASE_URL and SMTP settings
+
 go run ./cmd/server
 ```
 
+---
+
+## API Contract
+
+| Method & Path | Purpose | Request | Response |
+|---|---|---|---|
+| `GET /healthz` | Liveness check | - | `200 {"status":"ok"}` |
+| `POST /api/v1/emails` | Synchronous single email | JSON: `{"to","subject","body"}` | `200 {"message":"email sent"}` |
+| `POST /api/v1/recipients/parse` | Preview parsed Excel recipients | `multipart/form-data`: `file` | `200 {"valid":[...],"problems":[...]}` |
+| `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file`, `subject`, `body` | `202 {"batch_id":1,"total_recipients":42,"status":"pending"}` |
+| `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":42,"pending":0}` |
+
+---
+
+## Examples
+
+### 1. Queue an Email Campaign from an Excel File
+
 ```bash
-curl -i -X POST localhost:8080/api/v1/emails \
-  -H 'Content-Type: application/json' \
-  -d '{"to":"someone@example.com","subject":"Hello","body":"Sent from my Go API"}'
+curl -i -X POST http://localhost:8080/api/v1/batches \
+  -F "file=@samples/1_valid.xlsx" \
+  -F "subject=Hello {{.Name}}" \
+  -F "body=Hi {{.Name}},\n\nWelcome to our platform!"
 ```
 
-Test: `go test ./...`
-
-## Designing the API first
-
-Before writing a handler, write down the **contract**: what a client sends and what it gets back.
-Do this first because:
-
-- **The contract is the hard-to-change part.** Once clients depend on a URL or JSON shape, changing it breaks them. Internals (SMTP vs. an email API) can change freely.
-- **It forces you to answer the real questions early:** who calls this, what are the *things* (resources), what can go wrong, and what should the client *not* have to know?
-- **It's cheap to iterate.** Editing a table in a README costs nothing; editing shipped code and clients does.
-- **It becomes your checklist and your tests.** Each row below maps to a handler branch and a test case.
-
-Questions we answered for this project:
-
-| Question | Decision |
-|---|---|
-| What is the resource? | An *email* → noun URL `/emails`, not a verb like `/sendMail`. POST means "create one". |
-| Can the contract evolve? | Version in the URL: `/api/v1/...`. |
-| What does the client control? | `to`, `subject`, `body`. **Not** `from` - the server owns the sender, so nobody can spoof it. |
-| What does the client *not* see? | SMTP details. Real errors are logged server-side only. |
-| How are errors reported? | Correct HTTP status + one consistent JSON shape: `{"error": "..."}`. |
-
-### The contract
-
-| Method & path | Purpose |
-|---|---|
-| `GET /healthz` | Liveness check → `200 {"status":"ok"}` |
-| `POST /api/v1/emails` | Send an email |
-| `POST /api/v1/recipients/parse` | Parse recipients from an uploaded `.xlsx` file (alias: `/upload`) |
-
-`POST /api/v1/recipients/parse` request:
-- `multipart/form-data` with form field `file` containing an `.xlsx` file.
-
-`POST /api/v1/recipients/parse` response:
+Response:
 ```json
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
 {
-  "valid": [{ "name": "Aisha Rahman", "email": "aisha@example.com" }],
-  "problems": [{ "row": 4, "reason": "invalid email \"not-an-email\"" }]
+  "batch_id": 1,
+  "filename": "1_valid.xlsx",
+  "total_recipients": 5,
+  "status": "pending",
+  "message": "batch accepted and email jobs queued for processing"
 }
 ```
 
-`POST /api/v1/emails` request:
+### 2. Check Campaign Progress
 
+```bash
+curl -i http://localhost:8080/api/v1/batches/1
+```
+
+Response:
 ```json
-{ "to": "someone@example.com", "subject": "Hello", "body": "plain text body" }
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "batch_id": 1,
+  "filename": "1_valid.xlsx",
+  "status": "completed",
+  "total": 5,
+  "sent": 5,
+  "failed": 0,
+  "pending": 0,
+  "processing": 0
+}
 ```
 
-| Status | When | Body |
-|---|---|---|
-| `200` | Accepted by the SMTP server | `{"message":"email sent"}` |
-| `400` | Bad JSON, unknown field, missing/invalid `to`, empty subject/body, line breaks in `to`/`subject` | `{"error":"..."}` |
-| `405` | Wrong HTTP method | - |
-| `413` | Body larger than 1 MB | `{"error":"..."}` |
-| `502` | SMTP server failed (not the client's fault) | `{"error":"failed to send email"}` |
+---
 
-Rule of thumb: **4xx = the client should fix its request; 5xx = the server (or something it depends on) failed.**
-
-## Project layout
+## Architecture & Project Layout
 
 ```
-cmd/server/main.go        entry point - only wires things together
-internal/config/          reads settings from env / .env
-internal/mailer/          Mailer interface + SMTP implementation (no HTTP knowledge)
-internal/api/             HTTP handlers, validation, routes (no SMTP knowledge)
+cmd/server/main.go            entry point - wires config, database, smtp pool, worker pool, http server
+internal/config/              reads settings from process env / .env
+internal/template/            personalized template engine using text/template
+internal/recipients/          Excel .xlsx parser and validation
+internal/store/               PostgreSQL schema, batches, and FOR UPDATE SKIP LOCKED job queue
+internal/mailer/              SMTP connection pool and message delivery
+internal/worker/              background Go worker goroutines with graceful shutdown
+internal/api/                 HTTP routes, handlers, and validation
+schema.sql                    PostgreSQL database schema
 ```
 
-- `cmd/<name>/` = one folder per executable.
-- `internal/` = the Go compiler forbids other modules from importing it, so it's your private code.
-- Dependencies point one way: `main → api → mailer → config`. The `api` package only knows the `Mailer` *interface*, which is why tests can use a fake.
+---
 
-## Deliberately left out (good next steps)
+## Tests
 
-Authentication (API key), rate limiting, HTML emails/attachments, sending in the background with a queue,
-request logging middleware, graceful shutdown (`srv.Shutdown`), config validation at startup.
+Run all unit tests:
+```bash
+go test ./...
+```

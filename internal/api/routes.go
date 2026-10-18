@@ -14,13 +14,16 @@ func NewRouter(h *Handler) http.Handler {
 
 	mux.HandleFunc("GET /healthz", h.Health)
 
-	// "/api/v1" - the version lives in the URL so we can later ship a /v2
-	// with breaking changes without breaking existing clients.
-	// "/emails" is a noun (the resource); the HTTP verb POST says "create one".
+	// Single email delivery (synchronous)
 	mux.HandleFunc("POST /api/v1/emails", h.SendEmail)
 
 	// Excel parsing routes: accept an uploaded .xlsx file and return parsed recipients.
 	mux.HandleFunc("POST /api/v1/recipients/parse", h.ParseRecipients)
+
+	// Background batch job routes: upload Excel + template, queue jobs in PostgreSQL,
+	// and query asynchronous progress.
+	mux.HandleFunc("POST /api/v1/batches", h.CreateBatch)
+	mux.HandleFunc("GET /api/v1/batches/{id}", h.GetBatch)
 
 	return mux
 }

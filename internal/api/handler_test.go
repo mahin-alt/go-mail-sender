@@ -30,7 +30,7 @@ func (f *fakeMailer) Send(to, subject, body string) error {
 func post(m *fakeMailer, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/emails", strings.NewReader(body))
 	rec := httptest.NewRecorder()
-	NewRouter(NewHandler(m)).ServeHTTP(rec, req)
+	NewRouter(NewHandler(m, nil, nil)).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -70,7 +70,7 @@ func TestSendEmail(t *testing.T) {
 func TestWrongMethod(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/emails", nil)
 	rec := httptest.NewRecorder()
-	NewRouter(NewHandler(&fakeMailer{})).ServeHTTP(rec, req)
+	NewRouter(NewHandler(&fakeMailer{}, nil, nil)).ServeHTTP(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
 	}
@@ -92,7 +92,7 @@ func postFile(route, path, filename, fieldName string) *httptest.ResponseRecorde
 	req := httptest.NewRequest(http.MethodPost, route, &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rec := httptest.NewRecorder()
-	NewRouter(NewHandler(&fakeMailer{})).ServeHTTP(rec, req)
+	NewRouter(NewHandler(&fakeMailer{}, nil, nil)).ServeHTTP(rec, req)
 	return rec
 }
 
