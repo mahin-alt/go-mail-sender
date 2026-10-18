@@ -145,12 +145,14 @@ func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
 
 // createBatchResponse is returned by POST /api/v1/batches.
 type createBatchResponse struct {
-	BatchID         int64                 `json:"batch_id"`
-	Filename        string                `json:"filename"`
-	TotalRecipients int                   `json:"total_recipients"`
-	Status          string                `json:"status"`
-	Problems        []recipients.RowError `json:"problems,omitempty"`
-	Message         string                `json:"message"`
+	BatchID      int64                 `json:"batch_id"`
+	Filename     string                `json:"filename"`
+	TotalRows    int                   `json:"total_rows"`
+	ValidCount   int                   `json:"valid_count"`
+	InvalidCount int                   `json:"invalid_count"`
+	Status       string                `json:"status"`
+	Problems     []recipients.RowError `json:"problems,omitempty"`
+	Message      string                `json:"message"`
 }
 
 // CreateBatch handles POST /api/v1/batches:
@@ -220,13 +222,14 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(validRecipients) == 0 {
-		writeError(w, http.StatusBadRequest, "no valid recipients found in the uploaded excel file")
+	if len(validRecipients) == 0 && len(problems) == 0 {
+		writeError(w, http.StatusBadRequest, "no recipient rows found in the uploaded excel file")
 		return
 	}
 
-	// Build jobs with rendered personalized subject and body
-	jobs := make([]store.Job, 0, len(validRecipients))
+	jobs := make([]store.Job, 0, len(validRecipients)+len(problems))
+
+	// 1. Build jobs for valid recipients (status = 'pending')
 	for _, rec := range validRecipients {
 		data := template.RecipientData{
 			Name:  rec.Name,
@@ -250,10 +253,25 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			RecipientEmail: rec.Email,
 			Subject:        renderedSubject,
 			Body:           renderedBody,
+			Status:         "pending",
 		})
 	}
 
-	// Save batch and jobs atomically inside a database transaction
+	// 2. Build jobs for invalid recipients (status = 'invalid') so they are tracked
+	// in the database without being picked up by background workers.
+	for _, prob := range problems {
+		reason := prob.Reason
+		jobs = append(jobs, store.Job{
+			RecipientName:  prob.Name,
+			RecipientEmail: prob.Email,
+			Subject:        "",
+			Body:           "",
+			Status:         "invalid",
+			LastError:      &reason,
+		})
+	}
+
+	// Save batch and all rows (valid + invalid) atomically inside a database transaction
 	batchID, err := h.store.CreateBatchWithJobs(r.Context(), header.Filename, subjectTmpl, bodyTmpl, jobs)
 	if err != nil {
 		log.Printf("create batch failed: %v", err)
@@ -261,19 +279,26 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Wake up idle workers immediately to process the new batch with 0ms latency
-	if h.worker != nil {
+	// Wake up idle workers only if there are pending jobs to send
+	if len(validRecipients) > 0 && h.worker != nil {
 		h.worker.Wake()
 	}
 
-	// 202 Accepted: request is accepted and queued for asynchronous background processing
+	batchStatus := "pending"
+	if len(validRecipients) == 0 {
+		batchStatus = "completed"
+	}
+
+	// 202 Accepted: request is accepted
 	writeJSON(w, http.StatusAccepted, createBatchResponse{
-		BatchID:         batchID,
-		Filename:        header.Filename,
-		TotalRecipients: len(jobs),
-		Status:          "pending",
-		Problems:        problems,
-		Message:         "batch accepted and email jobs queued for processing",
+		BatchID:      batchID,
+		Filename:     header.Filename,
+		TotalRows:    len(jobs),
+		ValidCount:   len(validRecipients),
+		InvalidCount: len(problems),
+		Status:       batchStatus,
+		Problems:     problems,
+		Message:      "batch accepted; valid emails queued for delivery and invalid rows recorded",
 	})
 }
 
@@ -304,6 +329,36 @@ func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, progress)
+}
+
+// GetBatchJobs handles GET /api/v1/batches/{id}/jobs:
+// Lists jobs for a batch, optionally filtered by ?status=invalid (or pending/sent/failed).
+func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusInternalServerError, "database store is not configured")
+		return
+	}
+
+	idStr := r.PathValue("id")
+	batchID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || batchID <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid batch id")
+		return
+	}
+
+	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
+	jobs, err := h.store.GetBatchJobs(r.Context(), batchID, statusFilter)
+	if err != nil {
+		log.Printf("get batch jobs failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
+		return
+	}
+
+	if jobs == nil {
+		jobs = []store.Job{}
+	}
+
+	writeJSON(w, http.StatusOK, jobs)
 }
 
 func validateEmailReq(req sendEmailRequest) string {

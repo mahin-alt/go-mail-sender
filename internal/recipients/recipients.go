@@ -32,8 +32,10 @@ type Recipient struct {
 // RowError describes one row we could not use. It is DATA, not a failure of
 // the whole run: a bad row should not stop the good rows from being sent.
 type RowError struct {
-	Row    int    `json:"row"`    // the row number as shown in Excel (header is row 1)
-	Reason string `json:"reason"` // human readable explanation
+	Row    int    `json:"row"`             // the row number as shown in Excel (header is row 1)
+	Name   string `json:"name,omitempty"`  // raw name from spreadsheet
+	Email  string `json:"email,omitempty"` // raw email from spreadsheet
+	Reason string `json:"reason"`          // human readable explanation
 }
 
 // Error makes RowError satisfy Go's built-in `error` interface (any type with
@@ -121,24 +123,24 @@ func parseFile(f *excelize.File) ([]Recipient, []RowError, error) {
 			continue
 		}
 		if email == "" {
-			problems = append(problems, RowError{Row: rowNum, Reason: "email is empty"})
+			problems = append(problems, RowError{Row: rowNum, Name: name, Email: email, Reason: "email is empty"})
 			continue
 		}
 		if name == "" {
 			// Policy choice: we require a name. If you'd rather email people
 			// without one, remove this check and use a fallback greeting.
-			problems = append(problems, RowError{Row: rowNum, Reason: "name is empty"})
+			problems = append(problems, RowError{Row: rowNum, Name: name, Email: email, Reason: "name is empty"})
 			continue
 		}
 		if !validEmail(email) {
-			problems = append(problems, RowError{Row: rowNum, Reason: fmt.Sprintf("invalid email %q", email)})
+			problems = append(problems, RowError{Row: rowNum, Name: name, Email: email, Reason: fmt.Sprintf("invalid email %q", email)})
 			continue
 		}
 
 		// Email addresses are case-insensitive in practice, so compare lowercase.
 		email = strings.ToLower(email)
 		if _, dup := seen[email]; dup {
-			problems = append(problems, RowError{Row: rowNum, Reason: fmt.Sprintf("duplicate email %q", email)})
+			problems = append(problems, RowError{Row: rowNum, Name: name, Email: email, Reason: fmt.Sprintf("duplicate email %q", email)})
 			continue
 		}
 		seen[email] = struct{}{}

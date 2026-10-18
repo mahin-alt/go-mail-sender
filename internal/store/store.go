@@ -68,6 +68,7 @@ type BatchProgress struct {
 	Failed     int    `json:"failed"`
 	Pending    int    `json:"pending"`
 	Processing int    `json:"processing"`
+	Invalid    int    `json:"invalid"`
 }
 
 // Store wraps the database connection.
@@ -145,14 +146,27 @@ func (s *Store) CreateBatchWithJobs(
 	}
 	defer tx.Rollback() // Safe: no-op if tx.Commit() succeeds below.
 
+	// Determine initial batch status based on whether there are pending jobs to process
+	hasPending := false
+	for _, j := range jobs {
+		if j.Status == "pending" || j.Status == "" {
+			hasPending = true
+			break
+		}
+	}
+	initialStatus := "pending"
+	if !hasPending && len(jobs) > 0 {
+		initialStatus = "completed"
+	}
+
 	// 1. Insert the parent batch record
 	var batchID int64
 	insertBatchSQL := `
 		INSERT INTO batches (filename, subject_template, body_template, total_jobs, status)
-		VALUES ($1, $2, $3, $4, 'pending')
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
 	`
-	err = tx.QueryRowContext(ctx, insertBatchSQL, filename, subjectTmpl, bodyTmpl, len(jobs)).Scan(&batchID)
+	err = tx.QueryRowContext(ctx, insertBatchSQL, filename, subjectTmpl, bodyTmpl, len(jobs), initialStatus).Scan(&batchID)
 	if err != nil {
 		return 0, fmt.Errorf("insert batch: %w", err)
 	}
@@ -186,20 +200,25 @@ func (s *Store) CreateBatchWithJobs(
 }
 
 // insertJobsChunk builds a multi-row INSERT statement:
-// INSERT INTO email_jobs (...) VALUES ($1, $2...), ($7, $8...)
+// INSERT INTO email_jobs (...) VALUES ($1, $2...), ($9, $10...)
 func insertJobsChunk(ctx context.Context, tx *sql.Tx, batchID int64, jobs []Job) error {
 	var valueStrings []string
 	var valueArgs []any
 
-	// 6 columns per row
+	// 8 columns per row
 	for i, j := range jobs {
-		offset := i * 6
-		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)",
-			offset+1, offset+2, offset+3, offset+4, offset+5, offset+6))
+		offset := i * 8
+		valueStrings = append(valueStrings, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			offset+1, offset+2, offset+3, offset+4, offset+5, offset+6, offset+7, offset+8))
 
 		maxAttempts := j.MaxAttempts
 		if maxAttempts <= 0 {
 			maxAttempts = 3
+		}
+
+		status := j.Status
+		if status == "" {
+			status = "pending"
 		}
 
 		valueArgs = append(valueArgs,
@@ -208,12 +227,14 @@ func insertJobsChunk(ctx context.Context, tx *sql.Tx, batchID int64, jobs []Job)
 			j.RecipientEmail,
 			j.Subject,
 			j.Body,
+			status,
+			j.LastError,
 			maxAttempts,
 		)
 	}
 
 	query := fmt.Sprintf(`
-		INSERT INTO email_jobs (batch_id, recipient_name, recipient_email, subject, body, max_attempts)
+		INSERT INTO email_jobs (batch_id, recipient_name, recipient_email, subject, body, status, last_error, max_attempts)
 		VALUES %s
 	`, strings.Join(valueStrings, ", "))
 
@@ -387,7 +408,8 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 		       COUNT(*) FILTER (WHERE j.status = 'sent') AS sent_count,
 		       COUNT(*) FILTER (WHERE j.status = 'failed') AS failed_count,
 		       COUNT(*) FILTER (WHERE j.status = 'pending') AS pending_count,
-		       COUNT(*) FILTER (WHERE j.status = 'processing') AS processing_count
+		       COUNT(*) FILTER (WHERE j.status = 'processing') AS processing_count,
+		       COUNT(*) FILTER (WHERE j.status = 'invalid') AS invalid_count
 		FROM batches b
 		LEFT JOIN email_jobs j ON j.batch_id = b.id
 		WHERE b.id = $1
@@ -404,6 +426,7 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 		&bp.Failed,
 		&bp.Pending,
 		&bp.Processing,
+		&bp.Invalid,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -413,4 +436,53 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 	}
 
 	return &bp, nil
+}
+
+// GetBatchJobs retrieves jobs for a given batch, optionally filtered by status (e.g. "invalid").
+func (s *Store) GetBatchJobs(ctx context.Context, batchID int64, statusFilter string) ([]Job, error) {
+	query := `
+		SELECT id, batch_id, recipient_name, recipient_email, subject, body,
+		       status, attempts, max_attempts, last_error, locked_at, run_at,
+		       created_at, updated_at, sent_at
+		FROM email_jobs
+		WHERE batch_id = $1
+		  AND ($2 = '' OR status = $2)
+		ORDER BY id ASC
+	`
+	rows, err := s.db.QueryContext(ctx, query, batchID, statusFilter)
+	if err != nil {
+		return nil, fmt.Errorf("query batch jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []Job
+	for rows.Next() {
+		var j Job
+		if err := rows.Scan(
+			&j.ID,
+			&j.BatchID,
+			&j.RecipientName,
+			&j.RecipientEmail,
+			&j.Subject,
+			&j.Body,
+			&j.Status,
+			&j.Attempts,
+			&j.MaxAttempts,
+			&j.LastError,
+			&j.LockedAt,
+			&j.RunAt,
+			&j.CreatedAt,
+			&j.UpdatedAt,
+			&j.SentAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan job row: %w", err)
+		}
+		jobs = append(jobs, j)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return jobs, nil
 }

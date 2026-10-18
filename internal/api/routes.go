@@ -24,6 +24,7 @@ func NewRouter(h *Handler) http.Handler {
 	// and query asynchronous progress.
 	mux.HandleFunc("POST /api/v1/batches", h.CreateBatch)
 	mux.HandleFunc("GET /api/v1/batches/{id}", h.GetBatch)
+	mux.HandleFunc("GET /api/v1/batches/{id}/jobs", h.GetBatchJobs)
 
 	return mux
 }

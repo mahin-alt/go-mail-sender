@@ -39,8 +39,9 @@ go run ./cmd/server
 | `GET /healthz` | Liveness check | - | `200 {"status":"ok"}` |
 | `POST /api/v1/emails` | Synchronous single email | JSON: `{"to","subject","body"}` | `200 {"message":"email sent"}` |
 | `POST /api/v1/recipients/parse` | Preview parsed Excel recipients | `multipart/form-data`: `file` | `200 {"valid":[...],"problems":[...]}` |
-| `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file`, `subject`, `body` | `202 {"batch_id":1,"total_recipients":42,"status":"pending"}` |
-| `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":42,"pending":0}` |
+| `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file`, `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4}` |
+| `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":38,"invalid":4}` |
+| `GET /api/v1/batches/{id}/jobs` | **List jobs for a batch (filter by status)** | Query: `?status=invalid` | `200 [{"id":4,"recipient_email":"...","status":"invalid","last_error":"..."}]` |
 
 ---
 
