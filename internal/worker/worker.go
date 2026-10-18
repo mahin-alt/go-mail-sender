@@ -59,7 +59,7 @@ func NewPool(
 		pollInterval: pollInterval,
 		store:        st,
 		mailer:       m,
-		wakeChan:     make(chan struct{}, 1),
+		wakeChan:     make(chan struct{}, workerCount),
 	}
 }
 
@@ -74,12 +74,14 @@ func (p *Pool) Start(parentCtx context.Context) {
 	}
 }
 
-// Wake sends a non-blocking signal to wake up idle workers immediately.
-// If a signal is already queued, it does nothing.
+// Wake sends non-blocking signals to wake up ALL idle workers immediately
+// whenever a new batch is created.
 func (p *Pool) Wake() {
-	select {
-	case p.wakeChan <- struct{}{}:
-	default:
+	for i := 0; i < p.workerCount; i++ {
+		select {
+		case p.wakeChan <- struct{}{}:
+		default:
+		}
 	}
 }
 
