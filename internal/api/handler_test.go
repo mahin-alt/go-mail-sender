@@ -1,9 +1,14 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -69,4 +74,65 @@ func TestWrongMethod(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405", rec.Code)
 	}
+}
+
+func postFile(route, path, filename, fieldName string) *httptest.ResponseRecorder {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	if fieldName != "" {
+		part, _ := writer.CreateFormFile(fieldName, filename)
+		if path != "" {
+			data, _ := os.ReadFile(path)
+			part.Write(data)
+		}
+	}
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, route, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	NewRouter(NewHandler(&fakeMailer{})).ServeHTTP(rec, req)
+	return rec
+}
+
+func TestParseRecipients(t *testing.T) {
+	t.Run("valid file", func(t *testing.T) {
+		rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "1_valid.xlsx"), "1_valid.xlsx", "file")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body)
+		}
+
+		var resp parseRecipientsResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if len(resp.Valid) != 5 {
+			t.Errorf("valid = %d, want 5", len(resp.Valid))
+		}
+		if len(resp.Problems) != 0 {
+			t.Errorf("problems = %d, want 0", len(resp.Problems))
+		}
+	})
+
+	t.Run("missing form field", func(t *testing.T) {
+		rec := postFile("/api/v1/recipients/parse", "", "", "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("unsupported file extension", func(t *testing.T) {
+		rec := postFile("/api/v1/recipients/parse", "", "test.csv", "file")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400", rec.Code)
+		}
+	})
+
+	t.Run("wrong headers", func(t *testing.T) {
+		rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "7_wrong_headers.xlsx"), "7_wrong_headers.xlsx", "file")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400 (body: %s)", rec.Code, rec.Body)
+		}
+	})
 }

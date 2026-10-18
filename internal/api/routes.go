@@ -19,5 +19,8 @@ func NewRouter(h *Handler) http.Handler {
 	// "/emails" is a noun (the resource); the HTTP verb POST says "create one".
 	mux.HandleFunc("POST /api/v1/emails", h.SendEmail)
 
+	// Excel parsing routes: accept an uploaded .xlsx file and return parsed recipients.
+	mux.HandleFunc("POST /api/v1/recipients/parse", h.ParseRecipients)
+
 	return mux
 }

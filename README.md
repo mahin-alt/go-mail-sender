@@ -43,6 +43,18 @@ Questions we answered for this project:
 |---|---|
 | `GET /healthz` | Liveness check → `200 {"status":"ok"}` |
 | `POST /api/v1/emails` | Send an email |
+| `POST /api/v1/recipients/parse` | Parse recipients from an uploaded `.xlsx` file (alias: `/upload`) |
+
+`POST /api/v1/recipients/parse` request:
+- `multipart/form-data` with form field `file` containing an `.xlsx` file.
+
+`POST /api/v1/recipients/parse` response:
+```json
+{
+  "valid": [{ "name": "Aisha Rahman", "email": "aisha@example.com" }],
+  "problems": [{ "row": 4, "reason": "invalid email \"not-an-email\"" }]
+}
+```
 
 `POST /api/v1/emails` request:
 
