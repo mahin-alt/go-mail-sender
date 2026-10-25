@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"mime/multipart"
@@ -11,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sendmail/internal/domaincheck"
 )
 
 // fakeMailer satisfies mailer.Mailer without touching the network.
@@ -77,6 +80,10 @@ func TestWrongMethod(t *testing.T) {
 }
 
 func postFile(route, path, filename, fieldName string) *httptest.ResponseRecorder {
+	return postFileTo(NewHandler(&fakeMailer{}, nil, nil), route, path, filename, fieldName)
+}
+
+func postFileTo(h *Handler, route, path, filename, fieldName string) *httptest.ResponseRecorder {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 
@@ -92,7 +99,7 @@ func postFile(route, path, filename, fieldName string) *httptest.ResponseRecorde
 	req := httptest.NewRequest(http.MethodPost, route, &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rec := httptest.NewRecorder()
-	NewRouter(NewHandler(&fakeMailer{}, nil, nil)).ServeHTTP(rec, req)
+	NewRouter(h).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -133,6 +140,68 @@ func TestParseRecipients(t *testing.T) {
 		rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "7_wrong_headers.xlsx"), "7_wrong_headers.xlsx", "file")
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status = %d, want 400 (body: %s)", rec.Code, rec.Body)
+		}
+	})
+}
+
+// fakeDomains satisfies DomainChecker with canned answers per domain
+// (anything not listed is Valid), so no DNS is needed.
+type fakeDomains map[string]domaincheck.Result
+
+func (f fakeDomains) Check(_ context.Context, domain string) domaincheck.Result {
+	if r, ok := f[domain]; ok {
+		return r
+	}
+	return domaincheck.Result{Status: domaincheck.Valid}
+}
+
+func TestParseRecipientsDomainCheck(t *testing.T) {
+	sample := filepath.Join("..", "..", "samples", "11_domain_check.xlsx")
+	checker := fakeDomains{
+		"nonexistent.invalid": {Status: domaincheck.Invalid, Reason: "domain nonexistent.invalid does not exist or has no mail server"},
+		"example.com":         {Status: domaincheck.Invalid, Reason: "domain example.com does not accept mail"},
+		"yahoo.com":           {Status: domaincheck.Unknown, Reason: "could not verify domain yahoo.com: timeout"},
+	}
+
+	parse := func(t *testing.T, h *Handler) parseRecipientsResponse {
+		t.Helper()
+		rec := postFileTo(h, "/api/v1/recipients/parse", sample, "11_domain_check.xlsx", "file")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body)
+		}
+		var resp parseRecipientsResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return resp
+	}
+
+	t.Run("dead domains rejected, unknown kept and reported", func(t *testing.T) {
+		resp := parse(t, NewHandler(&fakeMailer{}, nil, nil).WithDomainChecker(checker))
+
+		if len(resp.Problems) != 2 {
+			t.Fatalf("problems = %d, want 2 (%+v)", len(resp.Problems), resp.Problems)
+		}
+		for _, p := range resp.Problems {
+			if p.Row < 2 || p.Reason == "" {
+				t.Errorf("problem should carry its row and reason: %+v", p)
+			}
+		}
+		if resp.Problems[0].Row > resp.Problems[1].Row {
+			t.Errorf("problems should be in row order: %+v", resp.Problems)
+		}
+		if len(resp.Valid) != 6 {
+			t.Errorf("valid = %d, want 6", len(resp.Valid))
+		}
+		if resp.UnverifiedCount != 1 || len(resp.Unverified) != 1 || resp.Unverified[0].Email != "carla@yahoo.com" {
+			t.Errorf("unverified = %d %+v, want just carla@yahoo.com", resp.UnverifiedCount, resp.Unverified)
+		}
+	})
+
+	t.Run("no checker configured leaves everything valid", func(t *testing.T) {
+		resp := parse(t, NewHandler(&fakeMailer{}, nil, nil))
+		if len(resp.Valid) != 8 || len(resp.Problems) != 0 || resp.UnverifiedCount != 0 {
+			t.Errorf("valid=%d problems=%d unverified=%d, want 8/0/0", len(resp.Valid), len(resp.Problems), resp.UnverifiedCount)
 		}
 	})
 }

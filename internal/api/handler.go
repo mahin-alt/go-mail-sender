@@ -9,15 +9,18 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/mail"
+	"slices"
 	"strconv"
 	"strings"
 
+	"sendmail/internal/domaincheck"
 	"sendmail/internal/mailer"
 	"sendmail/internal/recipients"
 	"sendmail/internal/store"
@@ -36,9 +39,75 @@ const (
 // Concept: dependency injection. Handlers receive dependencies via struct fields
 // rather than global variables. This allows tests to pass fakes/mocks easily.
 type Handler struct {
-	mailer mailer.Mailer
-	store  *store.Store
-	worker *worker.Pool
+	mailer  mailer.Mailer
+	store   *store.Store
+	worker  *worker.Pool
+	domains DomainChecker // nil = domain (DNS/MX) checking disabled
+}
+
+// DomainChecker reports whether an email domain can receive mail.
+// *domaincheck.Checker satisfies it; tests pass a fake.
+type DomainChecker interface {
+	Check(ctx context.Context, domain string) domaincheck.Result
+}
+
+// WithDomainChecker enables the recipient domain check and returns h for chaining.
+func (h *Handler) WithDomainChecker(c DomainChecker) *Handler {
+	h.domains = c
+	return h
+}
+
+// verifyDomains runs the domain check over parsed recipients.
+//   - ok:         recipients to keep (domain valid, or could not be verified)
+//   - rejected:   rows whose domain definitely cannot receive mail
+//   - unverified: kept rows whose lookup failed (e.g. DNS timeout), reported so
+//     "confirmed" and "could not check" are distinguishable
+//
+// A DNS failure never rejects a row: wrongly dropping a real customer costs
+// more than a bounce. With no checker configured everything is kept as-is.
+func (h *Handler) verifyDomains(ctx context.Context, recs []recipients.Recipient) (ok []recipients.Recipient, rejected, unverified []recipients.RowError) {
+	if h.domains == nil {
+		return recs, nil, nil
+	}
+
+	// Look each domain up once per request (the rows are checked one after
+	// another; a shared cache and concurrency come in a later phase).
+	results := make(map[string]domaincheck.Result)
+
+	ok = make([]recipients.Recipient, 0, len(recs))
+	for _, rec := range recs {
+		domain := rec.Email[strings.LastIndex(rec.Email, "@")+1:]
+		res, seen := results[domain]
+		if !seen {
+			res = h.domains.Check(ctx, domain)
+			results[domain] = res
+		}
+
+		switch res.Status {
+		case domaincheck.Invalid:
+			rejected = append(rejected, recipients.RowError{Row: rec.Row, Name: rec.Name, Email: rec.Email, Reason: res.Reason})
+		case domaincheck.Unknown:
+			unverified = append(unverified, recipients.RowError{Row: rec.Row, Name: rec.Name, Email: rec.Email, Reason: res.Reason})
+			ok = append(ok, rec)
+		default:
+			ok = append(ok, rec)
+		}
+	}
+
+	if len(unverified) > 0 {
+		log.Printf("domain check: %d recipient(s) kept but could not be verified (DNS errors)", len(unverified))
+	}
+	return ok, rejected, unverified
+}
+
+// mergeProblems appends rejected rows to problems, keeping spreadsheet row order.
+func mergeProblems(problems, rejected []recipients.RowError) []recipients.RowError {
+	if len(rejected) == 0 {
+		return problems
+	}
+	problems = append(problems, rejected...)
+	slices.SortStableFunc(problems, func(a, b recipients.RowError) int { return a.Row - b.Row })
+	return problems
 }
 
 // NewHandler builds a Handler with all required dependencies.
@@ -97,8 +166,10 @@ func (h *Handler) SendEmail(w http.ResponseWriter, r *http.Request) {
 
 // parseRecipientsResponse is the response shape for POST /api/v1/recipients/parse.
 type parseRecipientsResponse struct {
-	Valid    []recipients.Recipient `json:"valid"`
-	Problems []recipients.RowError  `json:"problems"`
+	Valid           []recipients.Recipient `json:"valid"`
+	Problems        []recipients.RowError  `json:"problems"`
+	UnverifiedCount int                    `json:"unverified_count"`
+	Unverified      []recipients.RowError  `json:"unverified,omitempty"`
 }
 
 // ParseRecipients handles POST /api/v1/recipients/parse (preview parsed Excel recipients).
@@ -137,9 +208,14 @@ func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	valid, rejected, unverified := h.verifyDomains(r.Context(), valid)
+	problems = mergeProblems(problems, rejected)
+
 	writeJSON(w, http.StatusOK, parseRecipientsResponse{
-		Valid:    valid,
-		Problems: problems,
+		Valid:           valid,
+		Problems:        problems,
+		UnverifiedCount: len(unverified),
+		Unverified:      unverified,
 	})
 }
 
@@ -152,7 +228,11 @@ type createBatchResponse struct {
 	InvalidCount int                   `json:"invalid_count"`
 	Status       string                `json:"status"`
 	Problems     []recipients.RowError `json:"problems,omitempty"`
-	Message      string                `json:"message"`
+	// UnverifiedCount counts valid rows whose domain lookup failed (e.g. DNS
+	// timeout). They are still queued; see Unverified for which ones.
+	UnverifiedCount int                   `json:"unverified_count"`
+	Unverified      []recipients.RowError `json:"unverified,omitempty"`
+	Message         string                `json:"message"`
 }
 
 // CreateBatch handles POST /api/v1/batches:
@@ -227,6 +307,11 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reject rows whose domain cannot receive mail; they are recorded below as
+	// 'invalid' jobs together with the syntax problems.
+	validRecipients, rejected, unverified := h.verifyDomains(r.Context(), validRecipients)
+	problems = mergeProblems(problems, rejected)
+
 	jobs := make([]store.Job, 0, len(validRecipients)+len(problems))
 
 	// 1. Build jobs for valid recipients (status = 'pending')
@@ -291,14 +376,16 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 
 	// 202 Accepted: request is accepted
 	writeJSON(w, http.StatusAccepted, createBatchResponse{
-		BatchID:      batchID,
-		Filename:     header.Filename,
-		TotalRows:    len(jobs),
-		ValidCount:   len(validRecipients),
-		InvalidCount: len(problems),
-		Status:       batchStatus,
-		Problems:     problems,
-		Message:      "batch accepted; valid emails queued for delivery and invalid rows recorded",
+		BatchID:         batchID,
+		Filename:        header.Filename,
+		TotalRows:       len(jobs),
+		ValidCount:      len(validRecipients),
+		InvalidCount:    len(problems),
+		Status:          batchStatus,
+		Problems:        problems,
+		UnverifiedCount: len(unverified),
+		Unverified:      unverified,
+		Message:         "batch accepted; valid emails queued for delivery and invalid rows recorded",
 	})
 }
 

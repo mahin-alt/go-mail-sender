@@ -51,6 +51,10 @@ type Config struct {
 	// MaxJobRetries is how many times a failed email job will be retried
 	// before being permanently marked as failed.
 	MaxJobRetries int
+
+	// DomainCheckEnabled turns on the DNS/MX check of recipient domains when
+	// recipients are parsed. Rows whose domain cannot receive mail are rejected.
+	DomainCheckEnabled bool
 }
 
 // Load reads configuration from a .env file (if present) and the process
@@ -82,7 +86,22 @@ func Load() (Config, error) {
 		SMTPPoolSize:    getEnvInt("SMTP_POOL_SIZE", 3),
 		JobPollInterval: getEnvDuration("JOB_POLL_INTERVAL", 500*time.Millisecond),
 		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
+
+		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
 	}, nil
+}
+
+// getEnvBool parses a boolean environment variable ("true", "0", ...), or returns fallback.
+func getEnvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fallback
+	}
+	return b
 }
 
 // getEnv returns the variable's value, or fallback if it is unset/empty.

@@ -52,9 +52,12 @@ func TestParseExcelNormalises(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Recipient{Name: "Ben Carter", Email: "ben@example.com"}
-	if valid[1] != want {
-		t.Errorf("valid[1] = %+v, want %+v", valid[1], want)
+	got := valid[1]
+	if got.Name != "Ben Carter" || got.Email != "ben@example.com" {
+		t.Errorf("valid[1] = %+v, want Ben Carter <ben@example.com>", got)
+	}
+	if got.Row < 2 {
+		t.Errorf("valid[1].Row = %d, want a data row (>= 2)", got.Row)
 	}
 }
 

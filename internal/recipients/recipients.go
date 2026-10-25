@@ -27,6 +27,7 @@ import (
 type Recipient struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	Row   int    `json:"row"` // spreadsheet row (header is row 1), so later checks can point back at it
 }
 
 // RowError describes one row we could not use. It is DATA, not a failure of
@@ -145,7 +146,7 @@ func parseFile(f *excelize.File) ([]Recipient, []RowError, error) {
 		}
 		seen[email] = struct{}{}
 
-		valid = append(valid, Recipient{Name: name, Email: email})
+		valid = append(valid, Recipient{Name: name, Email: email, Row: rowNum})
 	}
 
 	return valid, problems, nil

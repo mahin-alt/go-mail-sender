@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +28,7 @@ import (
 
 	"sendmail/internal/api"
 	"sendmail/internal/config"
+	"sendmail/internal/domaincheck"
 	"sendmail/internal/mailer"
 	"sendmail/internal/store"
 	"sendmail/internal/worker"
@@ -88,6 +90,10 @@ func main() {
 
 	// 6. Build HTTP Handler & Router
 	handler := api.NewHandler(smtpPool, st, workerPool)
+	if cfg.DomainCheckEnabled {
+		handler.WithDomainChecker(domaincheck.NewChecker(net.DefaultResolver))
+		log.Printf("recipient domain (DNS/MX) check enabled")
+	}
 	router := api.NewRouter(handler)
 
 	srv := &http.Server{
