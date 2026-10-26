@@ -36,6 +36,13 @@ type Config struct {
 	// HTTPAddr is where our API listens, e.g. ":8080".
 	HTTPAddr string
 
+	// HTTPReadTimeout bounds how long the server waits to read an entire
+	// request, including the uploaded file. HTTPWriteTimeout bounds how long
+	// a handler may take before its response must be written; it must exceed
+	// the slowest request (e.g. a large batch upload with domain checks).
+	HTTPReadTimeout  time.Duration
+	HTTPWriteTimeout time.Duration
+
 	// WorkerCount is the number of background Go worker goroutines
 	// polling PostgreSQL and sending emails concurrently.
 	WorkerCount int
@@ -75,13 +82,18 @@ func Load() (Config, error) {
 	smtpPass := getFirstEnv([]string{"SMTP_PASSWORD", "MAILTRAP_PASSWORD"}, "")
 
 	return Config{
-		DatabaseURL:     getEnv("DATABASE_URL", "postgres://localhost:5432/sendmail?sslmode=disable"),
-		SMTPHost:        smtpHost,
-		SMTPPort:        smtpPort,
-		SMTPUsername:    smtpUser,
-		SMTPPassword:    smtpPass,
-		MailFrom:        getEnv("MAIL_FROM", "hello@example.com"),
-		HTTPAddr:        getEnv("HTTP_ADDR", ":8080"),
+		DatabaseURL:  getEnv("DATABASE_URL", "postgres://localhost:5432/sendmail?sslmode=disable"),
+		SMTPHost:     smtpHost,
+		SMTPPort:     smtpPort,
+		SMTPUsername: smtpUser,
+		SMTPPassword: smtpPass,
+		MailFrom:     getEnv("MAIL_FROM", "hello@example.com"),
+		HTTPAddr:     getEnv("HTTP_ADDR", ":8080"),
+
+		// Deliberately generous so large uploads do not fail with a dropped connection.
+		HTTPReadTimeout:  getEnvDuration("HTTP_READ_TIMEOUT", 5*time.Minute),
+		HTTPWriteTimeout: getEnvDuration("HTTP_WRITE_TIMEOUT", 15*time.Minute),
+
 		WorkerCount:     getEnvInt("WORKER_COUNT", 3),
 		SMTPPoolSize:    getEnvInt("SMTP_POOL_SIZE", 3),
 		JobPollInterval: getEnvDuration("JOB_POLL_INTERVAL", 500*time.Millisecond),
