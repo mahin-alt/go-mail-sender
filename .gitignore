@@ -27,4 +27,7 @@ coverage.html
 # OS files
 .DS_Store
 Thumbs.db
+
+# LibreOffice lock files (created while a spreadsheet is open)
+.~lock.*#
 go.sum
