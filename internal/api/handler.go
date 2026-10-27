@@ -20,10 +20,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"sendmail/internal/domaincheck"
 	"sendmail/internal/mailer"
 	"sendmail/internal/recipients"
+	"sendmail/internal/settings"
 	"sendmail/internal/store"
 	"sendmail/internal/template"
 	"sendmail/internal/worker"
@@ -43,7 +45,13 @@ type Handler struct {
 	mailer  mailer.Mailer
 	store   *store.Store
 	worker  *worker.Pool
-	domains DomainChecker // nil = domain (DNS/MX) checking disabled
+	domains DomainChecker // nil = no checker available
+
+	// domainsOn is the runtime on/off switch for the domain check, flipped from
+	// the Settings page. Atomic because requests read it while Settings writes it.
+	domainsOn atomic.Bool
+
+	settings *settings.Service // nil = settings endpoints disabled
 }
 
 // DomainChecker reports whether an email domain can receive mail.
@@ -55,6 +63,19 @@ type DomainChecker interface {
 // WithDomainChecker enables the recipient domain check and returns h for chaining.
 func (h *Handler) WithDomainChecker(c DomainChecker) *Handler {
 	h.domains = c
+	h.domainsOn.Store(c != nil)
+	return h
+}
+
+// SetDomainCheckEnabled switches the domain check on or off at runtime. It has
+// no effect until a checker was provided with WithDomainChecker.
+func (h *Handler) SetDomainCheckEnabled(on bool) {
+	h.domainsOn.Store(on)
+}
+
+// WithSettings enables the /api/v1/settings endpoints.
+func (h *Handler) WithSettings(s *settings.Service) *Handler {
+	h.settings = s
 	return h
 }
 
@@ -67,7 +88,7 @@ func (h *Handler) WithDomainChecker(c DomainChecker) *Handler {
 // A DNS failure never rejects a row: wrongly dropping a real customer costs
 // more than a bounce. With no checker configured everything is kept as-is.
 func (h *Handler) verifyDomains(ctx context.Context, recs []recipients.Recipient) (ok []recipients.Recipient, rejected, unverified []recipients.RowError) {
-	if h.domains == nil {
+	if h.domains == nil || !h.domainsOn.Load() {
 		return recs, nil, nil
 	}
 

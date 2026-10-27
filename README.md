@@ -46,6 +46,9 @@ go run ./cmd/server
 | `GET /api/v1/batches/{id}/jobs?limit=` | **Paged job list** (adding `limit`, `offset` or `q` switches to the paged form) | Query: `status`, `q` (email/name), `limit`, `offset` | `200 {"items":[...],"total":42,"limit":20,"offset":0}` |
 | `POST /api/v1/batches/{id}/retry` | **Requeue all failed jobs in a batch** (invalid rows are skipped) | none | `200 {"retried":3}` |
 | `POST /api/v1/jobs/{id}/retry` | **Requeue one failed job** | none | `200 {"retried":1}`, `404` if not failed |
+| `GET /api/v1/settings` | **List editable settings** with effective value, source (`env`/`override`), `apply` (`instant`/`restart`/`readonly`) and `restart_required`. Secrets are never returned | none | `200 {"items":[{"key":"SMTP_HOST","value":"localhost","source":"env","apply":"instant",...}]}` |
+| `PUT /api/v1/settings` | **Change or reset settings.** All-or-nothing. Changing SMTP settings first opens a real connection with the new values and refuses the save if it fails | JSON `{"values":{"SMTP_HOST":"smtp.example.com"},"reset":["MAIL_FROM"]}` | `200 {"items":[...]}`, `400 {"error":"..."}` |
+| `POST /api/v1/settings/smtp/test` | **Send a real test email** over a fresh connection. Omitted fields use the current settings, so unsaved edits can be tried first | JSON `{"to":"me@example.com","port":"587","tls_mode":"starttls"}` | `200 {"message":"test email sent to ..."}`, `502` with the SMTP reason |
 
 ---
 
@@ -120,4 +123,34 @@ schema.sql                    PostgreSQL database schema
 Run all unit tests:
 ```bash
 go test ./...
+```
+
+
+## SMTP encryption and runtime settings
+
+**`SMTP_TLS_MODE`** controls encryption to the mail server:
+
+| Mode | Behaviour | Typical use |
+|---|---|---|
+| `auto` (default) | Upgrade with STARTTLS if the server offers it, otherwise plain | works for Mailpit and most servers |
+| `none` | Never encrypt | local test servers |
+| `starttls` | Require STARTTLS, fail if not offered | real providers on port 587 |
+| `tls` | Encrypted from the first byte (implicit TLS) | real providers on port 465 |
+
+Certificates are verified against the system trust store. To trust a private CA or a self-signed certificate in development, point `SSL_CERT_FILE` at it.
+
+**Settings overrides.** Selected env settings can be changed from the dashboard (`/api/v1/settings`). Saved values are stored in the `app_settings` table and override the environment; resetting a setting deletes the override. SMTP, sender, domain check and retry settings apply instantly; worker count, pool size and poll interval are saved but reported with `restart_required` until the server restarts. `DATABASE_URL` and the HTTP address/timeouts are never editable.
+
+The SMTP password is stored encrypted (AES-256-GCM) with the key in `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`). Without the key the password cannot be edited from the dashboard. Keep the key stable: if it changes, stored secrets are ignored and the environment value is used.
+
+> **These endpoints have no authentication yet.** Do not expose the API beyond localhost until login is added.
+
+## Running the database tests
+
+Tests that need PostgreSQL are skipped unless `TEST_DATABASE_URL` is set. Point it at a scratch schema or a database with "test" in its name (the settings tests refuse to run against the `public` schema of any other database), and run packages one at a time:
+
+```bash
+psql "$DATABASE_URL" -c 'CREATE SCHEMA scratch_test'
+TEST_DATABASE_URL="$DATABASE_URL&search_path=scratch_test" go test -p 1 ./...
+psql "$DATABASE_URL" -c 'DROP SCHEMA scratch_test CASCADE'
 ```

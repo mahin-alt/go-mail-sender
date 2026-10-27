@@ -45,3 +45,13 @@ WHERE status = 'pending';
 -- Index for counting jobs per batch quickly when reporting progress.
 CREATE INDEX IF NOT EXISTS idx_email_jobs_batch_id
 ON email_jobs (batch_id, status);
+
+-- Settings overrides edited from the dashboard. A row overrides the value of the
+-- same-named environment variable. Secret values (e.g. SMTP_PASSWORD) are stored
+-- encrypted (AES-256-GCM, key from SETTINGS_ENCRYPTION_KEY).
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    secret BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

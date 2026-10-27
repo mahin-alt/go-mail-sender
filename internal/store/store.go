@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	// Register pgx as the database/sql driver. The blank identifier "_" imports
@@ -103,19 +104,21 @@ const defaultMaxAttempts = 3
 // Store wraps the database connection.
 type Store struct {
 	db          *sql.DB
-	maxAttempts int
+	maxAttempts atomic.Int64 // read by uploads while Settings may change it
 }
 
 // New creates a new Store backed by db.
 func New(db *sql.DB) *Store {
-	return &Store{db: db, maxAttempts: defaultMaxAttempts}
+	s := &Store{db: db}
+	s.maxAttempts.Store(defaultMaxAttempts)
+	return s
 }
 
 // SetMaxAttempts sets how many delivery attempts newly queued jobs get.
 // Values below 1 are ignored.
 func (s *Store) SetMaxAttempts(n int) {
 	if n > 0 {
-		s.maxAttempts = n
+		s.maxAttempts.Store(int64(n))
 	}
 }
 
@@ -151,6 +154,13 @@ func (s *Store) InitSchema(ctx context.Context) error {
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		sent_at TIMESTAMPTZ
+	);
+
+	CREATE TABLE IF NOT EXISTS app_settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		secret BOOLEAN NOT NULL DEFAULT FALSE,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_email_jobs_fetchable
@@ -225,7 +235,7 @@ func (s *Store) CreateBatchWithJobs(
 		}
 		chunk := jobs[i:end]
 
-		if err := insertJobsChunk(ctx, tx, batchID, chunk, s.maxAttempts); err != nil {
+		if err := insertJobsChunk(ctx, tx, batchID, chunk, int(s.maxAttempts.Load())); err != nil {
 			return 0, fmt.Errorf("insert jobs chunk: %w", err)
 		}
 	}
@@ -704,4 +714,65 @@ func (s *Store) RetryFailedJob(ctx context.Context, jobID int64) (int, error) {
 		return 0, fmt.Errorf("find failed job: %w", err)
 	}
 	return s.RetryFailedJobs(ctx, batchID, &jobID)
+}
+
+// SettingRow is one stored settings override. For secret settings Value holds
+// ciphertext; the store never interprets it.
+type SettingRow struct {
+	Value     string
+	Secret    bool
+	UpdatedAt time.Time
+}
+
+// GetSettings returns every stored settings override, keyed by setting name.
+func (s *Store) GetSettings(ctx context.Context) (map[string]SettingRow, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value, secret, updated_at FROM app_settings`)
+	if err != nil {
+		return nil, fmt.Errorf("query settings: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]SettingRow{}
+	for rows.Next() {
+		var key string
+		var r SettingRow
+		if err := rows.Scan(&key, &r.Value, &r.Secret, &r.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan setting: %w", err)
+		}
+		out[key] = r
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+	return out, nil
+}
+
+// SaveSettings upserts the given overrides and deletes the listed keys, all in
+// one transaction so a settings change is applied completely or not at all.
+func (s *Store) SaveSettings(ctx context.Context, set map[string]SettingRow, remove []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for key, r := range set {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO app_settings (key, value, secret, updated_at)
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (key) DO UPDATE
+			SET value = EXCLUDED.value, secret = EXCLUDED.secret, updated_at = NOW()
+		`, key, r.Value, r.Secret); err != nil {
+			return fmt.Errorf("save setting %s: %w", key, err)
+		}
+	}
+	for _, key := range remove {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM app_settings WHERE key = $1`, key); err != nil {
+			return fmt.Errorf("delete setting %s: %w", key, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit settings: %w", err)
+	}
+	return nil
 }

@@ -75,6 +75,11 @@ type Config struct {
 	// CORSAllowedOrigins lists the browser origins (the dashboard's URL) that
 	// may call the API, e.g. "https://dashboard.example.com". "*" allows any.
 	CORSAllowedOrigins []string
+
+	// SettingsEncryptionKey is a base64-encoded 32-byte key (openssl rand -base64 32)
+	// used to encrypt secret settings, such as the SMTP password, in the database.
+	// Without it, secrets cannot be edited from the dashboard.
+	SettingsEncryptionKey string
 }
 
 // Load reads configuration from a .env file (if present) and the process
@@ -119,6 +124,8 @@ func Load() (Config, error) {
 		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
 
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
+
+		SettingsEncryptionKey: getEnv("SETTINGS_ENCRYPTION_KEY", ""),
 
 		CORSAllowedOrigins: getEnvList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 	}, nil

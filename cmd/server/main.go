@@ -8,6 +8,7 @@
 //   1. config      - reads environment settings (.env)
 //   2. database    - connects to PostgreSQL via database/sql (pgx driver)
 //   3. store       - manages schema, batches, and the email job queue
+//      (+ saved settings that override the environment)
 //   4. smtp pool   - manages persistent, reusable SMTP connections
 //   5. worker pool - runs background Go workers that claim jobs using FOR UPDATE SKIP LOCKED
 //   6. http server - serves the REST API
@@ -30,6 +31,7 @@ import (
 	"sendmail/internal/config"
 	"sendmail/internal/domaincheck"
 	"sendmail/internal/mailer"
+	"sendmail/internal/settings"
 	"sendmail/internal/store"
 	"sendmail/internal/worker"
 
@@ -52,11 +54,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Configure pool limits for database/sql
-	db.SetMaxOpenConns(cfg.WorkerCount + 10)
-	db.SetMaxIdleConns(cfg.WorkerCount + 2)
-	db.SetConnMaxLifetime(30 * time.Minute)
-
 	// Verify database connectivity
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
@@ -69,17 +66,46 @@ func main() {
 
 	// 3. Initialize Store and ensure database tables exist
 	st := store.New(db)
-	st.SetMaxAttempts(cfg.MaxJobRetries)
 	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer schemaCancel()
 	if err := st.InitSchema(schemaCtx); err != nil {
 		log.Printf("WARNING: schema initialization warning: %v", err)
 	} else {
-		log.Printf("database schema verified (batches and email_jobs tables ready)")
+		log.Printf("database schema verified (batches, email_jobs and app_settings tables ready)")
 	}
 
+	// 3b. Settings edited from the dashboard override the environment. Load them
+	// now so everything built below (workers, SMTP pool) starts with the
+	// effective values. The Applier pushes later changes into the running app.
+	encKey, err := settings.ParseKey(cfg.SettingsEncryptionKey)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	var (
+		smtpPool *mailer.Pool
+		handler  *api.Handler
+	)
+	settingsSvc := settings.New(st, cfg, encKey, func(c config.Config) {
+		smtpPool.Reconfigure(c)
+		st.SetMaxAttempts(c.MaxJobRetries)
+		handler.SetDomainCheckEnabled(c.DomainCheckEnabled)
+	})
+	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer loadCancel()
+	if effective, err := settingsSvc.Load(loadCtx); err != nil {
+		log.Printf("WARNING: could not load saved settings, using environment values: %v", err)
+	} else {
+		cfg = effective
+	}
+	st.SetMaxAttempts(cfg.MaxJobRetries)
+
+	// Configure pool limits for database/sql
+	db.SetMaxOpenConns(cfg.WorkerCount + 10)
+	db.SetMaxIdleConns(cfg.WorkerCount + 2)
+	db.SetConnMaxLifetime(30 * time.Minute)
+
 	// 4. Initialize SMTP Connection Pool
-	smtpPool := mailer.NewPool(cfg, cfg.SMTPPoolSize)
+	smtpPool = mailer.NewPool(cfg, cfg.SMTPPoolSize)
 	defer smtpPool.Close()
 
 	// 5. Initialize Background Worker Pool
@@ -90,9 +116,13 @@ func main() {
 	workerPool.Start(workerCtx)
 
 	// 6. Build HTTP Handler & Router
-	handler := api.NewHandler(smtpPool, st, workerPool)
+	handler = api.NewHandler(smtpPool, st, workerPool)
+	// The checker is always installed so the Settings page can switch it on and
+	// off at runtime; DOMAIN_CHECK_ENABLED only decides the starting state.
+	handler.WithDomainChecker(domaincheck.NewChecker(net.DefaultResolver))
+	handler.SetDomainCheckEnabled(cfg.DomainCheckEnabled)
+	handler.WithSettings(settingsSvc)
 	if cfg.DomainCheckEnabled {
-		handler.WithDomainChecker(domaincheck.NewChecker(net.DefaultResolver))
 		log.Printf("recipient domain (DNS/MX) check enabled")
 	}
 	router := api.WithCORS(api.NewRouter(handler), cfg.CORSAllowedOrigins)
