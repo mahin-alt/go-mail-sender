@@ -62,3 +62,14 @@ func TestListBatches_NoStore(t *testing.T) {
 		t.Fatalf("status = %d, want 500 when store is not configured", rec.Code)
 	}
 }
+
+func TestRetryEndpoints_NoStore(t *testing.T) {
+	for _, path := range []string{"/api/v1/batches/1/retry", "/api/v1/jobs/1/retry"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		rec := httptest.NewRecorder()
+		NewRouter(NewHandler(&fakeMailer{}, nil, nil)).ServeHTTP(rec, req)
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s: status = %d, want 500 when store is not configured", path, rec.Code)
+		}
+	}
+}

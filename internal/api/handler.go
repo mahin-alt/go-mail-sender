@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -433,7 +434,32 @@ func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
+	q := r.URL.Query()
+	statusFilter := strings.TrimSpace(q.Get("status"))
+
+	// Paged mode: if any paging/search parameter is present, return the paged
+	// envelope (with a total) used by the dashboard. Without them the original
+	// plain-array response is kept so existing callers keep working.
+	if q.Has("limit") || q.Has("offset") || q.Has("q") {
+		limit, offset, ok := parsePaging(w, q)
+		if !ok {
+			return
+		}
+		jobs, total, err := h.store.ListBatchJobs(r.Context(), batchID, store.JobListFilter{
+			Status: statusFilter,
+			Search: strings.TrimSpace(q.Get("q")),
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			log.Printf("list batch jobs failed: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
+			return
+		}
+		writeJSON(w, http.StatusOK, jobListResponse{Items: jobs, Total: total, Limit: limit, Offset: offset})
+		return
+	}
+
 	jobs, err := h.store.GetBatchJobs(r.Context(), batchID, statusFilter)
 	if err != nil {
 		log.Printf("get batch jobs failed: %v", err)
@@ -503,22 +529,9 @@ func (h *Handler) ListBatches(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	limit, offset := defaultPageSize, 0
-	if v := q.Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 {
-			writeError(w, http.StatusBadRequest, "invalid limit")
-			return
-		}
-		limit = min(n, maxPageSize)
-	}
-	if v := q.Get("offset"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "invalid offset")
-			return
-		}
-		offset = n
+	limit, offset, ok := parsePaging(w, q)
+	if !ok {
+		return
 	}
 
 	items, total, err := h.store.ListBatches(r.Context(), store.BatchListFilter{
@@ -534,4 +547,89 @@ func (h *Handler) ListBatches(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, batchListResponse{Items: items, Total: total, Limit: limit, Offset: offset})
+}
+
+// jobListResponse is the paged envelope returned by GetBatchJobs in paged mode.
+type jobListResponse struct {
+	Items  []store.Job `json:"items"`
+	Total  int         `json:"total"`
+	Limit  int         `json:"limit"`
+	Offset int         `json:"offset"`
+}
+
+// parsePaging reads ?limit= and ?offset= with defaults and bounds. On bad input
+// it writes a 400 and returns ok=false, so callers just return.
+func parsePaging(w http.ResponseWriter, q url.Values) (limit, offset int, ok bool) {
+	limit = defaultPageSize
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, "invalid limit")
+			return 0, 0, false
+		}
+		limit = min(n, maxPageSize)
+	}
+	if v := q.Get("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			writeError(w, http.StatusBadRequest, "invalid offset")
+			return 0, 0, false
+		}
+		offset = n
+	}
+	return limit, offset, true
+}
+
+type retryResponse struct {
+	Retried int `json:"retried"`
+}
+
+// RetryBatch handles POST /api/v1/batches/{id}/retry:
+// Requeues every failed job in the batch with a fresh set of attempts.
+func (h *Handler) RetryBatch(w http.ResponseWriter, r *http.Request) {
+	h.retry(w, r, false)
+}
+
+// RetryJob handles POST /api/v1/jobs/{id}/retry:
+// Requeues a single failed job.
+func (h *Handler) RetryJob(w http.ResponseWriter, r *http.Request) {
+	h.retry(w, r, true)
+}
+
+func (h *Handler) retry(w http.ResponseWriter, r *http.Request, singleJob bool) {
+	if h.store == nil {
+		writeError(w, http.StatusInternalServerError, "database store is not configured")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var n int
+	if singleJob {
+		n, err = h.store.RetryFailedJob(r.Context(), id)
+	} else {
+		n, err = h.store.RetryFailedJobs(r.Context(), id, nil)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrBatchNotFound) {
+			writeError(w, http.StatusNotFound, "batch not found")
+			return
+		}
+		if errors.Is(err, store.ErrJobNotRetryable) {
+			writeError(w, http.StatusNotFound, "no failed job with that id")
+			return
+		}
+		log.Printf("retry failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to retry")
+		return
+	}
+
+	if n > 0 && h.worker != nil {
+		h.worker.Wake()
+	}
+	writeJSON(w, http.StatusOK, retryResponse{Retried: n})
 }

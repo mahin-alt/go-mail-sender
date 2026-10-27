@@ -26,6 +26,9 @@ var ErrNoJobs = errors.New("no jobs available in queue")
 // ErrBatchNotFound is returned when a requested batch ID does not exist.
 var ErrBatchNotFound = errors.New("batch not found")
 
+// ErrJobNotRetryable is returned when a job does not exist or is not in the 'failed' state.
+var ErrJobNotRetryable = errors.New("job not found or not failed")
+
 // Batch represents one bulk email upload campaign.
 type Batch struct {
 	ID              int64      `json:"id"`
@@ -573,4 +576,132 @@ func (s *Store) ListBatches(ctx context.Context, f BatchListFilter) ([]BatchSumm
 		return nil, 0, fmt.Errorf("rows iteration error: %w", err)
 	}
 	return batches, total, nil
+}
+
+// JobListFilter narrows and pages a batch's job list.
+type JobListFilter struct {
+	Status string // exact job status, "" = any
+	Search string // case-insensitive substring of the recipient email or name, "" = any
+	Limit  int
+	Offset int
+}
+
+// ListBatchJobs returns one page of a batch's jobs (oldest first) plus the
+// total number of jobs matching the filter (for pagination).
+func (s *Store) ListBatchJobs(ctx context.Context, batchID int64, f JobListFilter) ([]Job, int, error) {
+	const where = `
+		WHERE batch_id = $1
+		  AND ($2 = '' OR status = $2)
+		  AND ($3 = '' OR recipient_email ILIKE '%' || $3 || '%' OR recipient_name ILIKE '%' || $3 || '%')
+	`
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM email_jobs `+where,
+		batchID, f.Status, f.Search).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count batch jobs: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, batch_id, recipient_name, recipient_email, subject, body,
+		       status, attempts, max_attempts, last_error, locked_at, run_at,
+		       created_at, updated_at, sent_at
+		FROM email_jobs `+where+`
+		ORDER BY id ASC
+		LIMIT $4 OFFSET $5`,
+		batchID, f.Status, f.Search, f.Limit, f.Offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query batch jobs: %w", err)
+	}
+	defer rows.Close()
+
+	jobs := []Job{} // non-nil so it encodes as [] not null
+	for rows.Next() {
+		var j Job
+		if err := rows.Scan(
+			&j.ID, &j.BatchID, &j.RecipientName, &j.RecipientEmail, &j.Subject, &j.Body,
+			&j.Status, &j.Attempts, &j.MaxAttempts, &j.LastError, &j.LockedAt, &j.RunAt,
+			&j.CreatedAt, &j.UpdatedAt, &j.SentAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan job row: %w", err)
+		}
+		jobs = append(jobs, j)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("rows iteration error: %w", err)
+	}
+	return jobs, total, nil
+}
+
+// RetryFailedJobs puts 'failed' jobs back in the queue with a fresh set of
+// attempts and returns how many were requeued. Only 'failed' jobs are touched:
+// 'invalid' rows were never rendered into an email, so there is nothing to send.
+//
+// With jobID == nil every failed job in the batch is requeued; otherwise only
+// that one job (which must belong to the batch). If any job was requeued and
+// the batch had already finished, the batch is reopened so progress and
+// completion tracking work again. Returns ErrBatchNotFound for an unknown batch.
+func (s *Store) RetryFailedJobs(ctx context.Context, batchID int64, jobID *int64) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE email_jobs
+		SET status = 'pending',
+		    attempts = 0,
+		    run_at = NOW(),
+		    locked_at = NULL,
+		    updated_at = NOW()
+		WHERE batch_id = $1
+		  AND status = 'failed'
+		  AND ($2::BIGINT IS NULL OR id = $2)
+	`, batchID, jobID)
+	if err != nil {
+		return 0, fmt.Errorf("requeue failed jobs: %w", err)
+	}
+	n64, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("requeue failed jobs: %w", err)
+	}
+
+	if n64 > 0 {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE batches
+			SET status = 'pending', completed_at = NULL, updated_at = NOW()
+			WHERE id = $1 AND status = 'completed'
+		`, batchID); err != nil {
+			return 0, fmt.Errorf("reopen batch: %w", err)
+		}
+	} else {
+		var exists bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS (SELECT 1 FROM batches WHERE id = $1)`, batchID).Scan(&exists); err != nil {
+			return 0, fmt.Errorf("check batch exists: %w", err)
+		}
+		if !exists {
+			return 0, ErrBatchNotFound
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit retry: %w", err)
+	}
+	return int(n64), nil
+}
+
+// RetryFailedJob requeues one failed job. It returns ErrJobNotRetryable if the
+// job does not exist or is not currently 'failed'.
+func (s *Store) RetryFailedJob(ctx context.Context, jobID int64) (int, error) {
+	var batchID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT batch_id FROM email_jobs WHERE id = $1 AND status = 'failed'`, jobID).Scan(&batchID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrJobNotRetryable
+		}
+		return 0, fmt.Errorf("find failed job: %w", err)
+	}
+	return s.RetryFailedJobs(ctx, batchID, &jobID)
 }
