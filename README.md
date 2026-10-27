@@ -27,7 +27,7 @@ An asynchronous, scalable email processing API in Go. Accepts Excel files (`.xls
 cp .env.example .env
 # Edit .env with your DATABASE_URL and SMTP settings
 
-go run ./cmd/server
+go run ./cmd/server   # creates/updates the database tables automatically on startup
 ```
 
 ---
@@ -110,11 +110,12 @@ cmd/server/main.go            entry point - wires config, database, smtp pool, w
 internal/config/              reads settings from process env / .env
 internal/template/            personalized template engine using text/template
 internal/recipients/          Excel .xlsx parser and validation
-internal/store/               PostgreSQL schema, batches, and FOR UPDATE SKIP LOCKED job queue
+internal/store/               batches, settings, stats, and the FOR UPDATE SKIP LOCKED job queue
+internal/migrations/          the database schema as numbered SQL files (goose), embedded in the binary
+cmd/migrate/                  command for running, inspecting and creating migrations by hand
 internal/mailer/              SMTP connection pool and message delivery
 internal/worker/              background Go worker goroutines with graceful shutdown
 internal/api/                 HTTP routes, handlers, and validation
-schema.sql                    PostgreSQL database schema
 ```
 
 ---
@@ -126,6 +127,39 @@ Run all unit tests:
 go test ./...
 ```
 
+
+## Database migrations
+
+The database schema is defined by numbered SQL files in [internal/migrations/sql](internal/migrations/sql), applied with [goose](https://github.com/pressly/goose). Goose keeps a table called `goose_db_version` in your database that records which files have already run, and each startup (or `migrate up`) applies only the missing ones, in order.
+
+| File | What it does |
+|---|---|
+| `00001_create_batches_and_email_jobs.sql` | the original tables and the job-queue indexes |
+| `00002_create_app_settings.sql` | settings edited from the dashboard |
+| `00003_add_stats_indexes.sql` | indexes that keep the Overview stats fast |
+
+Every file has an **Up** section (apply the change) and a **Down** section (undo it).
+
+**Normal use needs nothing:** the server applies pending migrations when it starts. A database created by the older code adopts them safely, because the first migrations use `IF NOT EXISTS` and existing data is left alone. Several servers starting at once are safe too; a database lock makes one apply them while the others wait.
+
+**Running them by hand:**
+
+```bash
+go run ./cmd/migrate status          # which migrations are applied, and when
+go run ./cmd/migrate up              # apply everything pending
+go run ./cmd/migrate down -yes       # undo the LAST migration only (can delete data)
+go run ./cmd/migrate create add_x    # make the next numbered file for a new change
+```
+
+**Making a schema change** (for example adding a column):
+
+1. `go run ./cmd/migrate create add_failed_at` creates `00004_add_failed_at.sql`.
+2. Write the change under `-- +goose Up` (`ALTER TABLE email_jobs ADD COLUMN failed_at TIMESTAMPTZ;`) and its exact reverse under `-- +goose Down`.
+3. Run the tests, then start the server (or `migrate up`). Commit the file with the code that needs it.
+
+Rules of thumb: never edit a migration that has already been applied anywhere (add a new one instead); one focused change per file; build indexes on large tables with `CREATE INDEX CONCURRENTLY` and a `-- +goose NO TRANSACTION` line, as `00003` does.
+
+**Production deploys:** set `AUTO_MIGRATE=false` to run migrations as a separate step (`migrate up`) before starting the new version. The server then refuses to start if the database is behind, instead of failing later on real requests.
 
 ## SMTP encryption and runtime settings
 
@@ -148,7 +182,7 @@ The SMTP password is stored encrypted (AES-256-GCM) with the key in `SETTINGS_EN
 
 ## Running the database tests
 
-Tests that need PostgreSQL are skipped unless `TEST_DATABASE_URL` is set. Point it at a scratch schema or a database with "test" in its name (the settings tests refuse to run against the `public` schema of any other database), and run packages one at a time:
+Tests that need PostgreSQL are skipped unless `TEST_DATABASE_URL` is set. They create the tables themselves (by running the migrations). Because some tests wipe tables or roll migrations back, they refuse to run against the `public` schema of any database whose name does not contain "test". Point `TEST_DATABASE_URL` at a scratch schema or a dedicated test database, and run packages one at a time:
 
 ```bash
 psql "$DATABASE_URL" -c 'CREATE SCHEMA scratch_test'

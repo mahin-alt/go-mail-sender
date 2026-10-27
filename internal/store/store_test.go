@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"sendmail/internal/migrations"
 )
 
 // openTestStore connects to TEST_DATABASE_URL, or skips the test when unset.
@@ -34,8 +36,8 @@ func openTestStore(t *testing.T) *Store {
 	}
 
 	st := New(db)
-	if err := st.InitSchema(context.Background()); err != nil {
-		t.Fatalf("init schema: %v", err)
+	if _, err := migrations.Up(context.Background(), db); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	return st
 }

@@ -76,6 +76,11 @@ type Config struct {
 	// may call the API, e.g. "https://dashboard.example.com". "*" allows any.
 	CORSAllowedOrigins []string
 
+	// AutoMigrate makes the server apply pending database migrations at startup.
+	// Set it to false when migrations run as a separate deploy step; the server
+	// then refuses to start if the database is behind.
+	AutoMigrate bool
+
 	// SettingsEncryptionKey is a base64-encoded 32-byte key (openssl rand -base64 32)
 	// used to encrypt secret settings, such as the SMTP password, in the database.
 	// Without it, secrets cannot be edited from the dashboard.
@@ -124,6 +129,8 @@ func Load() (Config, error) {
 		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
 
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
+
+		AutoMigrate: getEnvBool("AUTO_MIGRATE", true),
 
 		SettingsEncryptionKey: getEnv("SETTINGS_ENCRYPTION_KEY", ""),
 

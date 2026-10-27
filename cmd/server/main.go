@@ -31,6 +31,7 @@ import (
 	"sendmail/internal/config"
 	"sendmail/internal/domaincheck"
 	"sendmail/internal/mailer"
+	"sendmail/internal/migrations"
 	"sendmail/internal/settings"
 	"sendmail/internal/store"
 	"sendmail/internal/worker"
@@ -64,15 +65,30 @@ func main() {
 		log.Printf("database connected successfully")
 	}
 
-	// 3. Initialize Store and ensure database tables exist
-	st := store.New(db)
-	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer schemaCancel()
-	if err := st.InitSchema(schemaCtx); err != nil {
-		log.Printf("WARNING: schema initialization warning: %v", err)
-	} else {
-		log.Printf("database schema verified (batches, email_jobs and app_settings tables ready)")
+	// 3. Bring the database schema up to date, then create the Store.
+	//
+	// Migrations are numbered SQL files embedded in the binary (see
+	// internal/migrations). Failing here is fatal on purpose: running against a
+	// missing or outdated schema would only fail later, on real requests.
+	migCtx, migCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer migCancel()
+	if cfg.AutoMigrate {
+		applied, err := migrations.Up(migCtx, db)
+		if err != nil {
+			log.Fatalf("apply database migrations: %v", err)
+		}
+		if len(applied) == 0 {
+			log.Printf("database schema is up to date")
+		}
+		for _, m := range applied {
+			log.Printf("applied migration %s", m.Source.Path)
+		}
+	} else if pending, err := migrations.Pending(migCtx, db); err != nil {
+		log.Fatalf("check database migrations: %v", err)
+	} else if pending {
+		log.Fatalf("database has pending migrations and AUTO_MIGRATE is off: run `go run ./cmd/migrate up` first")
 	}
+	st := store.New(db)
 
 	// 3b. Settings edited from the dashboard override the environment. Load them
 	// now so everything built below (workers, SMTP pool) starts with the

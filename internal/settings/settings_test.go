@@ -12,6 +12,7 @@ import (
 
 	"sendmail/internal/config"
 	"sendmail/internal/mailer"
+	"sendmail/internal/migrations"
 	"sendmail/internal/store"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -157,8 +158,8 @@ func openStore(t *testing.T) *store.Store {
 	}
 
 	st := store.New(db)
-	if err := st.InitSchema(context.Background()); err != nil {
-		t.Fatal(err)
+	if _, err := migrations.Up(context.Background(), db); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	wipe := func() { db.Exec(`DELETE FROM app_settings`) }
 	wipe()
