@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -62,6 +63,10 @@ type Config struct {
 	// DomainCheckEnabled turns on the DNS/MX check of recipient domains when
 	// recipients are parsed. Rows whose domain cannot receive mail are rejected.
 	DomainCheckEnabled bool
+
+	// CORSAllowedOrigins lists the browser origins (the dashboard's URL) that
+	// may call the API, e.g. "https://dashboard.example.com". "*" allows any.
+	CORSAllowedOrigins []string
 }
 
 // Load reads configuration from a .env file (if present) and the process
@@ -100,6 +105,8 @@ func Load() (Config, error) {
 		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
 
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
+
+		CORSAllowedOrigins: getEnvList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 	}, nil
 }
 
@@ -114,6 +121,21 @@ func getEnvBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+// getEnvList parses a comma-separated environment variable, or returns fallback.
+func getEnvList(key string, fallback []string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // getEnv returns the variable's value, or fallback if it is unset/empty.

@@ -478,3 +478,60 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
+
+// batchListResponse is the paged envelope returned by ListBatches.
+type batchListResponse struct {
+	Items  []store.BatchSummary `json:"items"`
+	Total  int                  `json:"total"`
+	Limit  int                  `json:"limit"`
+	Offset int                  `json:"offset"`
+}
+
+// Paging bounds for list endpoints.
+const (
+	defaultPageSize = 20
+	maxPageSize     = 100
+)
+
+// ListBatches handles GET /api/v1/batches:
+// Lists batches newest-first with job counts. Query params: status, q
+// (filename search), limit (default 20, max 100) and offset.
+func (h *Handler) ListBatches(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusInternalServerError, "database store is not configured")
+		return
+	}
+
+	q := r.URL.Query()
+	limit, offset := defaultPageSize, 0
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, "invalid limit")
+			return
+		}
+		limit = min(n, maxPageSize)
+	}
+	if v := q.Get("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			writeError(w, http.StatusBadRequest, "invalid offset")
+			return
+		}
+		offset = n
+	}
+
+	items, total, err := h.store.ListBatches(r.Context(), store.BatchListFilter{
+		Status: strings.TrimSpace(q.Get("status")),
+		Search: strings.TrimSpace(q.Get("q")),
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		log.Printf("list batches failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to list batches")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, batchListResponse{Items: items, Total: total, Limit: limit, Offset: offset})
+}

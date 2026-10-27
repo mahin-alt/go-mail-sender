@@ -69,6 +69,7 @@ func main() {
 
 	// 3. Initialize Store and ensure database tables exist
 	st := store.New(db)
+	st.SetMaxAttempts(cfg.MaxJobRetries)
 	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer schemaCancel()
 	if err := st.InitSchema(schemaCtx); err != nil {
@@ -94,7 +95,7 @@ func main() {
 		handler.WithDomainChecker(domaincheck.NewChecker(net.DefaultResolver))
 		log.Printf("recipient domain (DNS/MX) check enabled")
 	}
-	router := api.NewRouter(handler)
+	router := api.WithCORS(api.NewRouter(handler), cfg.CORSAllowedOrigins)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

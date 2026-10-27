@@ -23,6 +23,7 @@ func NewRouter(h *Handler) http.Handler {
 	// Background batch job routes: upload Excel + template, queue jobs in PostgreSQL,
 	// and query asynchronous progress.
 	mux.HandleFunc("POST /api/v1/batches", h.CreateBatch)
+	mux.HandleFunc("GET /api/v1/batches", h.ListBatches)
 	mux.HandleFunc("GET /api/v1/batches/{id}", h.GetBatch)
 	mux.HandleFunc("GET /api/v1/batches/{id}/jobs", h.GetBatchJobs)
 

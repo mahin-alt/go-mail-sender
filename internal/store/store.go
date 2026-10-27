@@ -71,14 +71,49 @@ type BatchProgress struct {
 	Invalid    int    `json:"invalid"`
 }
 
+// BatchSummary is one row of the batch list: the batch plus its job counts.
+type BatchSummary struct {
+	ID          int64      `json:"id"`
+	Filename    string     `json:"filename"`
+	Status      string     `json:"status"`
+	Total       int        `json:"total"`
+	Sent        int        `json:"sent"`
+	Failed      int        `json:"failed"`
+	Pending     int        `json:"pending"`
+	Processing  int        `json:"processing"`
+	Invalid     int        `json:"invalid"`
+	CreatedAt   time.Time  `json:"created_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+// BatchListFilter narrows and pages the batch list.
+type BatchListFilter struct {
+	Status string // exact batch status, "" = any
+	Search string // case-insensitive substring of the filename, "" = any
+	Limit  int
+	Offset int
+}
+
+// defaultMaxAttempts is used when no value is configured via SetMaxAttempts.
+const defaultMaxAttempts = 3
+
 // Store wraps the database connection.
 type Store struct {
-	db *sql.DB
+	db          *sql.DB
+	maxAttempts int
 }
 
 // New creates a new Store backed by db.
 func New(db *sql.DB) *Store {
-	return &Store{db: db}
+	return &Store{db: db, maxAttempts: defaultMaxAttempts}
+}
+
+// SetMaxAttempts sets how many delivery attempts newly queued jobs get.
+// Values below 1 are ignored.
+func (s *Store) SetMaxAttempts(n int) {
+	if n > 0 {
+		s.maxAttempts = n
+	}
 }
 
 // InitSchema ensures the required tables and indexes exist.
@@ -187,7 +222,7 @@ func (s *Store) CreateBatchWithJobs(
 		}
 		chunk := jobs[i:end]
 
-		if err := insertJobsChunk(ctx, tx, batchID, chunk); err != nil {
+		if err := insertJobsChunk(ctx, tx, batchID, chunk, s.maxAttempts); err != nil {
 			return 0, fmt.Errorf("insert jobs chunk: %w", err)
 		}
 	}
@@ -201,7 +236,7 @@ func (s *Store) CreateBatchWithJobs(
 
 // insertJobsChunk builds a multi-row INSERT statement:
 // INSERT INTO email_jobs (...) VALUES ($1, $2...), ($9, $10...)
-func insertJobsChunk(ctx context.Context, tx *sql.Tx, batchID int64, jobs []Job) error {
+func insertJobsChunk(ctx context.Context, tx *sql.Tx, batchID int64, jobs []Job, defaultAttempts int) error {
 	var valueStrings []string
 	var valueArgs []any
 
@@ -213,7 +248,7 @@ func insertJobsChunk(ctx context.Context, tx *sql.Tx, batchID int64, jobs []Job)
 
 		maxAttempts := j.MaxAttempts
 		if maxAttempts <= 0 {
-			maxAttempts = 3
+			maxAttempts = defaultAttempts
 		}
 
 		status := j.Status
@@ -485,4 +520,57 @@ func (s *Store) GetBatchJobs(ctx context.Context, batchID int64, statusFilter st
 	}
 
 	return jobs, nil
+}
+
+// ListBatches returns one page of batches (newest first) with their job counts,
+// plus the total number of batches matching the filter (for pagination).
+func (s *Store) ListBatches(ctx context.Context, f BatchListFilter) ([]BatchSummary, int, error) {
+	const where = `
+		WHERE ($1 = '' OR b.status = $1)
+		  AND ($2 = '' OR b.filename ILIKE '%' || $2 || '%')
+	`
+
+	var total int
+	countSQL := `SELECT COUNT(*) FROM batches b ` + where
+	if err := s.db.QueryRowContext(ctx, countSQL, f.Status, f.Search).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count batches: %w", err)
+	}
+
+	listSQL := `
+		SELECT b.id, b.filename, b.status, b.total_jobs,
+		       COUNT(*) FILTER (WHERE j.status = 'sent'),
+		       COUNT(*) FILTER (WHERE j.status = 'failed'),
+		       COUNT(*) FILTER (WHERE j.status = 'pending'),
+		       COUNT(*) FILTER (WHERE j.status = 'processing'),
+		       COUNT(*) FILTER (WHERE j.status = 'invalid'),
+		       b.created_at, b.completed_at
+		FROM batches b
+		LEFT JOIN email_jobs j ON j.batch_id = b.id
+	` + where + `
+		GROUP BY b.id
+		ORDER BY b.id DESC
+		LIMIT $3 OFFSET $4
+	`
+	rows, err := s.db.QueryContext(ctx, listSQL, f.Status, f.Search, f.Limit, f.Offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query batches: %w", err)
+	}
+	defer rows.Close()
+
+	batches := []BatchSummary{} // non-nil so it encodes as [] not null
+	for rows.Next() {
+		var b BatchSummary
+		if err := rows.Scan(
+			&b.ID, &b.Filename, &b.Status, &b.Total,
+			&b.Sent, &b.Failed, &b.Pending, &b.Processing, &b.Invalid,
+			&b.CreatedAt, &b.CompletedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan batch row: %w", err)
+		}
+		batches = append(batches, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("rows iteration error: %w", err)
+	}
+	return batches, total, nil
 }
