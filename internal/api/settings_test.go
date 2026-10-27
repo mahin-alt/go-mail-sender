@@ -191,3 +191,26 @@ func TestDomainCheckRuntimeSwitch(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 }
+
+func TestGetStats_ParameterValidation(t *testing.T) {
+	r := NewRouter(NewHandler(&fakeMailer{}, nil, nil))
+
+	for _, q := range []string{
+		"days=0", "days=-3", "days=91", "days=abc", "days=1.5",
+		"tz=Mars/Base", "tz=Local", "tz=%20", "tz=UTC%0d%0aX-Evil:1",
+	} {
+		rec := do(r, "GET", "/api/v1/stats?"+q, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("?%s: status = %d (%s), want 400", q, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Valid parameters get past validation; with no database configured they
+	// reach the "store not configured" error instead of a 400.
+	for _, q := range []string{"", "days=1", "days=90", "tz=UTC", "tz=Asia/Dhaka&days=30"} {
+		rec := do(r, "GET", "/api/v1/stats?"+q, "")
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("?%s: status = %d, want 500 (no store)", q, rec.Code)
+		}
+	}
+}

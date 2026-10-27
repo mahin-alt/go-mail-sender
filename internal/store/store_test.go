@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -21,6 +22,17 @@ func openTestStore(t *testing.T) *Store {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+
+	// Some tests wipe tables, so refuse to touch the real "public" schema of a
+	// database that is not clearly a test database.
+	var schema, dbname string
+	if err := db.QueryRow(`SELECT current_schema(), current_database()`).Scan(&schema, &dbname); err != nil {
+		t.Fatalf("inspect db: %v", err)
+	}
+	if schema == "public" && !strings.Contains(dbname, "test") {
+		t.Skipf("refusing to run: TEST_DATABASE_URL points at the public schema of %q; use a scratch schema or a *test* database", dbname)
+	}
+
 	st := New(db)
 	if err := st.InitSchema(context.Background()); err != nil {
 		t.Fatalf("init schema: %v", err)

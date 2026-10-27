@@ -29,6 +29,9 @@ func NewRouter(h *Handler) http.Handler {
 	mux.HandleFunc("POST /api/v1/batches/{id}/retry", h.RetryBatch)
 	mux.HandleFunc("POST /api/v1/jobs/{id}/retry", h.RetryJob)
 
+	// Dashboard Overview numbers.
+	mux.HandleFunc("GET /api/v1/stats", h.GetStats)
+
 	// Settings: view and edit runtime configuration, and test SMTP.
 	mux.HandleFunc("GET /api/v1/settings", h.GetSettings)
 	mux.HandleFunc("PUT /api/v1/settings", h.UpdateSettings)

@@ -169,6 +169,17 @@ func (s *Store) InitSchema(ctx context.Context) error {
 
 	CREATE INDEX IF NOT EXISTS idx_email_jobs_batch_id
 	ON email_jobs (batch_id, status);
+
+	-- Small partial indexes that keep the dashboard's stats queries fast as the
+	-- table grows: each covers only the rows one stats query looks at.
+	CREATE INDEX IF NOT EXISTS idx_email_jobs_sent_at
+	ON email_jobs (sent_at) WHERE status = 'sent';
+
+	CREATE INDEX IF NOT EXISTS idx_email_jobs_failed
+	ON email_jobs (updated_at, batch_id) WHERE status = 'failed';
+
+	CREATE INDEX IF NOT EXISTS idx_email_jobs_processing
+	ON email_jobs (id) WHERE status = 'processing';
 	`
 	_, err := s.db.ExecContext(ctx, schema)
 	if err != nil {
