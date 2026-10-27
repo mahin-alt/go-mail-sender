@@ -9,6 +9,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"strconv"
@@ -29,6 +30,13 @@ type Config struct {
 	SMTPPort     string
 	SMTPUsername string
 	SMTPPassword string
+
+	// SMTPTLSMode controls transport encryption to the SMTP server:
+	//   "auto"     - upgrade with STARTTLS only if the server offers it (default)
+	//   "none"     - never encrypt (local test servers like Mailpit)
+	//   "starttls" - require STARTTLS; fail if the server does not offer it (port 587)
+	//   "tls"      - encrypted from the first byte, "implicit TLS" (port 465)
+	SMTPTLSMode string
 
 	// MailFrom is the sender address. It lives in config, NOT in the API
 	// request: clients must not be able to send mail "as" anyone they like.
@@ -86,12 +94,18 @@ func Load() (Config, error) {
 	smtpUser := getFirstEnv([]string{"SMTP_USERNAME", "MAILTRAP_USERNAME"}, "")
 	smtpPass := getFirstEnv([]string{"SMTP_PASSWORD", "MAILTRAP_PASSWORD"}, "")
 
+	tlsMode := strings.ToLower(getEnv("SMTP_TLS_MODE", "auto"))
+	if !ValidTLSMode(tlsMode) {
+		return Config{}, fmt.Errorf("SMTP_TLS_MODE %q is invalid: use auto, none, starttls or tls", tlsMode)
+	}
+
 	return Config{
 		DatabaseURL:  getEnv("DATABASE_URL", "postgres://localhost:5432/sendmail?sslmode=disable"),
 		SMTPHost:     smtpHost,
 		SMTPPort:     smtpPort,
 		SMTPUsername: smtpUser,
 		SMTPPassword: smtpPass,
+		SMTPTLSMode:  tlsMode,
 		MailFrom:     getEnv("MAIL_FROM", "hello@example.com"),
 		HTTPAddr:     getEnv("HTTP_ADDR", ":8080"),
 
@@ -108,6 +122,15 @@ func Load() (Config, error) {
 
 		CORSAllowedOrigins: getEnvList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 	}, nil
+}
+
+// ValidTLSMode reports whether mode is a supported SMTP_TLS_MODE value.
+func ValidTLSMode(mode string) bool {
+	switch mode {
+	case "auto", "none", "starttls", "tls":
+		return true
+	}
+	return false
 }
 
 // getEnvBool parses a boolean environment variable ("true", "0", ...), or returns fallback.

@@ -7,7 +7,8 @@
 package mailer
 
 import (
-	"net/smtp"
+	"context"
+	"time"
 
 	"sendmail/internal/config"
 )
@@ -36,30 +37,29 @@ func NewSMTPMailer(cfg config.Config) *SMTPMailer {
 }
 
 // Send delivers a plain-text email from the configured sender to `to`.
+//
+// NOTE: `subject` and `to` are put straight into headers, so they must
+// not contain "\r\n" - otherwise a caller could inject extra headers
+// (e.g. a hidden Bcc). The API layer validates this before calling us.
 func (m *SMTPMailer) Send(to, subject, body string) error {
-	var auth smtp.Auth
-	// Only supply authentication if credentials are provided (Mailtrap/prod).
-	// When using Mailpit on localhost without credentials, leave auth as nil.
-	if m.cfg.SMTPUsername != "" && m.cfg.SMTPPassword != "" {
-		auth = smtp.PlainAuth("", m.cfg.SMTPUsername, m.cfg.SMTPPassword, m.cfg.SMTPHost)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Same connection logic as the pool (TLS mode, auth), one message, then hang up.
+	client, err := Dial(ctx, ConnConfig{
+		Host:     m.cfg.SMTPHost,
+		Port:     m.cfg.SMTPPort,
+		Username: m.cfg.SMTPUsername,
+		Password: m.cfg.SMTPPassword,
+		TLSMode:  m.cfg.SMTPTLSMode,
+	})
+	if err != nil {
+		return err
 	}
+	defer client.Close()
 
-	// An email is just text: headers, a blank line, then the body.
-	// SMTP requires "\r\n" (CRLF) line endings.
-	// NOTE: `subject` and `to` are put straight into headers, so they must
-	// not contain "\r\n" - otherwise a caller could inject extra headers
-	// (e.g. a hidden Bcc). The API layer validates this before calling us.
-	message := buildMessage(m.cfg.MailFrom, to, subject, body)
-
-	// SendMail connects, authenticates (upgrading to TLS via STARTTLS when
-	// the server offers it), sends the message, and disconnects.
-	// Note the "envelope" (from/to arguments) is separate from the headers
-	// inside the message: the envelope is who the server actually delivers to.
-	return smtp.SendMail(
-		m.cfg.SMTPHost+":"+m.cfg.SMTPPort,
-		auth,
-		m.cfg.MailFrom,
-		[]string{to},
-		message,
-	)
+	if err := deliver(client, m.cfg.MailFrom, to, subject, body); err != nil {
+		return err
+	}
+	return client.Quit()
 }

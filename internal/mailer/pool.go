@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/smtp"
 	"strings"
 	"sync"
@@ -37,6 +36,8 @@ var ErrPoolClosed = errors.New("smtp connection pool is closed")
 
 // Pool manages a bounded set of reusable SMTP client connections.
 type Pool struct {
+	// mu protects cfg, gen, gens, activeCount and closed.
+	mu  sync.Mutex
 	cfg config.Config
 
 	// maxConns is the upper limit on concurrent SMTP sockets.
@@ -46,8 +47,12 @@ type Pool struct {
 	// A buffered channel acts as an efficient, thread-safe queue.
 	conns chan *smtp.Client
 
-	// mu protects activeCount and closed state.
-	mu          sync.Mutex
+	// gen is bumped by Reconfigure. gens records which generation each live
+	// client was dialed under, so a connection opened with old settings is
+	// closed instead of being reused after the settings change.
+	gen  uint64
+	gens map[*smtp.Client]uint64
+
 	activeCount int
 	closed      bool
 }
@@ -62,39 +67,69 @@ func NewPool(cfg config.Config, maxConns int) *Pool {
 		cfg:      cfg,
 		maxConns: maxConns,
 		conns:    make(chan *smtp.Client, maxConns),
+		gens:     make(map[*smtp.Client]uint64),
 	}
 }
 
-// dial creates and authenticates a single new SMTP client.
-func (p *Pool) dial(ctx context.Context) (*smtp.Client, error) {
-	addr := net.JoinHostPort(p.cfg.SMTPHost, p.cfg.SMTPPort)
+// Reconfigure switches the pool to new SMTP settings (host, port, credentials,
+// TLS mode, sender) without a restart. Idle connections are closed now;
+// connections that are mid-send are closed when they are released. Only the
+// SMTP-related fields of cfg are used; the pool size stays as it was.
+func (p *Pool) Reconfigure(cfg config.Config) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	// net.Dialer allows respecting the context deadline during connection.
-	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("dial smtp %s: %w", addr, err)
-	}
+	p.cfg = cfg
+	p.gen++
 
-	client, err := smtp.NewClient(conn, p.cfg.SMTPHost)
-	if err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("init smtp client: %w", err)
-	}
-
-	// Authenticate ONLY if credentials are provided.
-	// Mailpit by default does not require or advertise authentication.
-	if p.cfg.SMTPUsername != "" && p.cfg.SMTPPassword != "" {
-		auth := smtp.PlainAuth("", p.cfg.SMTPUsername, p.cfg.SMTPPassword, p.cfg.SMTPHost)
-		if ok, _ := client.Extension("AUTH"); ok {
-			if err := client.Auth(auth); err != nil {
-				_ = client.Close()
-				return nil, fmt.Errorf("smtp auth: %w", err)
-			}
+	for {
+		select {
+		case client := <-p.conns:
+			delete(p.gens, client)
+			_ = client.Close()
+			p.activeCount--
+		default:
+			return
 		}
 	}
+}
 
+// snapshot returns the current settings and generation.
+func (p *Pool) snapshot() (config.Config, uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.cfg, p.gen
+}
+
+// dial creates and authenticates a single new SMTP client using the settings
+// that are current right now, and registers it under that generation.
+func (p *Pool) dial(ctx context.Context) (*smtp.Client, error) {
+	cfg, gen := p.snapshot()
+
+	client, err := Dial(ctx, ConnConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		TLSMode:  cfg.SMTPTLSMode,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	p.mu.Lock()
+	p.gens[client] = gen
+	p.mu.Unlock()
 	return client, nil
+}
+
+// dropIdle closes a client that failed its health check and frees its slot.
+func (p *Pool) dropIdle(client *smtp.Client) {
+	_ = client.Close()
+	p.mu.Lock()
+	delete(p.gens, client)
+	p.activeCount--
+	p.mu.Unlock()
 }
 
 // Acquire retrieves an active SMTP client from the pool or creates a new one.
@@ -115,11 +150,8 @@ func (p *Pool) Acquire(ctx context.Context) (*smtp.Client, error) {
 			// Health check: send NOOP to verify the connection is still alive.
 			// If the remote server timed out and hung up, Noop() will return an error.
 			if err := client.Noop(); err != nil {
-				// Connection died while idle; close it and decrement activeCount.
-				_ = client.Close()
-				p.mu.Lock()
-				p.activeCount--
-				p.mu.Unlock()
+				// Connection died while idle; close it and free its slot.
+				p.dropIdle(client)
 				continue // Loop again to get or dial another connection.
 			}
 			return client, nil
@@ -151,10 +183,7 @@ func (p *Pool) Acquire(ctx context.Context) (*smtp.Client, error) {
 		case client := <-p.conns:
 			// Check if alive before returning
 			if err := client.Noop(); err != nil {
-				_ = client.Close()
-				p.mu.Lock()
-				p.activeCount--
-				p.mu.Unlock()
+				p.dropIdle(client)
 				continue
 			}
 			return client, nil
@@ -172,8 +201,11 @@ func (p *Pool) Release(client *smtp.Client) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.closed {
+	// Closed pool, or the settings changed while this client was in use:
+	// do not keep a connection made with outdated settings.
+	if p.closed || p.gens[client] != p.gen {
 		_ = client.Close()
+		delete(p.gens, client)
 		p.activeCount--
 		return
 	}
@@ -183,6 +215,7 @@ func (p *Pool) Release(client *smtp.Client) {
 	if err := client.Reset(); err != nil {
 		// If RSET fails, the socket is likely broken; discard it.
 		_ = client.Close()
+		delete(p.gens, client)
 		p.activeCount--
 		return
 	}
@@ -193,6 +226,7 @@ func (p *Pool) Release(client *smtp.Client) {
 	default:
 		// Channel unexpectedly full; discard
 		_ = client.Close()
+		delete(p.gens, client)
 		p.activeCount--
 	}
 }
@@ -205,6 +239,7 @@ func (p *Pool) Discard(client *smtp.Client) {
 	_ = client.Close()
 
 	p.mu.Lock()
+	delete(p.gens, client)
 	p.activeCount--
 	p.mu.Unlock()
 }
@@ -230,35 +265,10 @@ func (p *Pool) Send(to, subject, body string) error {
 	return nil
 }
 
-// deliverMessage sends the SMTP envelope and body over an open SMTP client.
+// deliverMessage sends one email over an open client, using the current sender.
 func (p *Pool) deliverMessage(client *smtp.Client, to, subject, body string) error {
-	// 1. MAIL FROM:<sender>
-	if err := client.Mail(p.cfg.MailFrom); err != nil {
-		return fmt.Errorf("mail from: %w", err)
-	}
-
-	// 2. RCPT TO:<recipient>
-	if err := client.Rcpt(to); err != nil {
-		return fmt.Errorf("rcpt to %q: %w", to, err)
-	}
-
-	// 3. DATA
-	w, err := client.Data()
-	if err != nil {
-		return fmt.Errorf("data command: %w", err)
-	}
-
-	message := buildMessage(p.cfg.MailFrom, to, subject, body)
-	if _, err := w.Write(message); err != nil {
-		_ = w.Close()
-		return fmt.Errorf("write message: %w", err)
-	}
-
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("close message data: %w", err)
-	}
-
-	return nil
+	cfg, _ := p.snapshot()
+	return deliver(client, cfg.MailFrom, to, subject, body)
 }
 
 // Close gracefully closes all active SMTP connections in the pool.
