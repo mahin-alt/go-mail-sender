@@ -39,3 +39,26 @@ func TestCreateMigration_Errors(t *testing.T) {
 		t.Error("a missing directory must be an error")
 	}
 }
+
+func TestSplitArgs_FlagsWorkInAnyPosition(t *testing.T) {
+	for _, in := range [][]string{{"1", "-yes"}, {"-yes", "1"}} {
+		flags, words := splitArgs(in)
+		if len(flags) != 1 || flags[0] != "-yes" || len(words) != 1 || words[0] != "1" {
+			t.Errorf("splitArgs(%v) = %v, %v", in, flags, words)
+		}
+	}
+}
+
+func TestVersionArg(t *testing.T) {
+	if v, err := versionArg("up-to", []string{"3"}); err != nil || v != 3 {
+		t.Errorf("valid: %d, %v", v, err)
+	}
+	if v, err := versionArg("down-to", []string{"0"}); err != nil || v != 0 {
+		t.Errorf("zero is valid for down-to: %d, %v", v, err)
+	}
+	for _, bad := range [][]string{nil, {"abc"}, {"-1"}, {"1", "2"}} {
+		if _, err := versionArg("up-to", bad); err == nil {
+			t.Errorf("versionArg(%v) should fail", bad)
+		}
+	}
+}

@@ -51,6 +51,35 @@ func Up(ctx context.Context, db *sql.DB) ([]*goose.MigrationResult, error) {
 	return p.Up(ctx)
 }
 
+// UpByOne applies only the next pending migration. It returns ErrNoNextVersion
+// (from goose) when nothing is pending.
+func UpByOne(ctx context.Context, db *sql.DB) (*goose.MigrationResult, error) {
+	p, err := provider(db)
+	if err != nil {
+		return nil, err
+	}
+	return p.UpByOne(ctx)
+}
+
+// UpTo applies pending migrations up to and including version.
+func UpTo(ctx context.Context, db *sql.DB, version int64) ([]*goose.MigrationResult, error) {
+	p, err := provider(db)
+	if err != nil {
+		return nil, err
+	}
+	return p.UpTo(ctx, version)
+}
+
+// DownTo rolls back migrations, newest first, until version is the newest one
+// still applied. Version 0 rolls back everything.
+func DownTo(ctx context.Context, db *sql.DB, version int64) ([]*goose.MigrationResult, error) {
+	p, err := provider(db)
+	if err != nil {
+		return nil, err
+	}
+	return p.DownTo(ctx, version)
+}
+
 // Down rolls back the single most recently applied migration.
 // Rolling back 00001 drops the batches and email_jobs tables and their data.
 func Down(ctx context.Context, db *sql.DB) (*goose.MigrationResult, error) {

@@ -145,11 +145,17 @@ Every file has an **Up** section (apply the change) and a **Down** section (undo
 **Running them by hand:**
 
 ```bash
-go run ./cmd/migrate status          # which migrations are applied, and when
-go run ./cmd/migrate up              # apply everything pending
-go run ./cmd/migrate down -yes       # undo the LAST migration only (can delete data)
-go run ./cmd/migrate create add_x    # make the next numbered file for a new change
+go run ./cmd/migrate status            # which migrations are applied, and when
+go run ./cmd/migrate up                # apply ALL pending migrations
+go run ./cmd/migrate up-by-one         # apply only the NEXT pending migration
+go run ./cmd/migrate up-to 2           # apply pending ones up to and including number 2
+go run ./cmd/migrate down -yes         # undo only the LAST applied migration
+go run ./cmd/migrate down-to 1 -yes    # undo newest-first until 1 is the newest applied
+go run ./cmd/migrate down-to 0 -yes    # undo EVERYTHING (drops all tables and their data)
+go run ./cmd/migrate create add_x      # make the next numbered file for a new change
 ```
+
+Rollbacks (`down`, `down-to`) can delete data, so they refuse to run without `-yes`. Numbers are the leading digits of the file name (`00002_...` is `2`); an unknown number is an error.
 
 **Making a schema change** (for example adding a column):
 
