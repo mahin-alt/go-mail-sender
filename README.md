@@ -112,7 +112,6 @@ internal/template/            personalized template engine using text/template
 internal/recipients/          Excel .xlsx parser and validation
 internal/store/               batches, settings, stats, and the FOR UPDATE SKIP LOCKED job queue
 internal/migrations/          the database schema as numbered SQL files (goose), embedded in the binary
-cmd/migrate/                  command for running, inspecting and creating migrations by hand
 internal/mailer/              SMTP connection pool and message delivery
 internal/worker/              background Go worker goroutines with graceful shutdown
 internal/api/                 HTTP routes, handlers, and validation
@@ -130,7 +129,7 @@ go test ./...
 
 ## Database migrations
 
-The database schema is defined by numbered SQL files in [internal/migrations/sql](internal/migrations/sql), applied with [goose](https://github.com/pressly/goose). Goose keeps a table called `goose_db_version` in your database that records which files have already run, and each startup (or `migrate up`) applies only the missing ones, in order.
+The database schema is defined by numbered SQL files in [internal/migrations/sql](internal/migrations/sql), applied with [goose](https://github.com/pressly/goose). Goose keeps a table called `goose_db_version` in your database that records which files have already run, and only the missing ones are applied, in order.
 
 | File | What it does |
 |---|---|
@@ -140,32 +139,71 @@ The database schema is defined by numbered SQL files in [internal/migrations/sql
 
 Every file has an **Up** section (apply the change) and a **Down** section (undo it).
 
-**Normal use needs nothing:** the server applies pending migrations when it starts. A database created by the older code adopts them safely, because the first migrations use `IF NOT EXISTS` and existing data is left alone. Several servers starting at once are safe too; a database lock makes one apply them while the others wait.
+**Normal use needs nothing:** the server applies pending migrations when it starts. A database created by the older code adopts them safely, because the first migrations use `IF NOT EXISTS` and existing data is left alone. Several servers starting at once are safe too; a database lock makes one apply them while the others wait. The goose command-line tool below is for everything else: checking status, stepping through, rolling back and creating new migrations.
 
-**Running them by hand:**
+### Setting up the goose command (once per developer)
 
-```bash
-go run ./cmd/migrate status            # which migrations are applied, and when
-go run ./cmd/migrate up                # apply ALL pending migrations
-go run ./cmd/migrate up-by-one         # apply only the NEXT pending migration
-go run ./cmd/migrate up-to 2           # apply pending ones up to and including number 2
-go run ./cmd/migrate down -yes         # undo only the LAST applied migration
-go run ./cmd/migrate down-to 1 -yes    # undo newest-first until 1 is the newest applied
-go run ./cmd/migrate down-to 0 -yes    # undo EVERYTHING (drops all tables and their data)
-go run ./cmd/migrate create add_x      # make the next numbered file for a new change
-```
+1. **Install the pinned version** (needs Go; the project uses goose **v3.29.0**, keep everyone on the same one):
 
-Rollbacks (`down`, `down-to`) can delete data, so they refuse to run without `-yes`. Numbers are the leading digits of the file name (`00002_...` is `2`); an unknown number is an error.
+   ```bash
+   go install github.com/pressly/goose/v3/cmd/goose@v3.29.0
+   ```
 
-**Making a schema change** (for example adding a column):
+   Then check it works and prints `goose version: v3.29.0`:
 
-1. `go run ./cmd/migrate create add_failed_at` creates `00004_add_failed_at.sql`.
+   ```bash
+   goose -version
+   ```
+
+   If the command is not found, add Go's bin folder to your `PATH`: `export PATH="$PATH:$(go env GOPATH)/bin"` (put it in your shell profile).
+
+   *Alternatives:* on a Mac, `brew install goose` (not pinned, you get the latest); on Windows or without Go, download a binary from the [releases page](https://github.com/pressly/goose/releases). Whatever you use, make sure `goose -version` matches the version above.
+
+2. **Configure it.** Goose reads settings from a `.env` file in the current folder. Copy the three `GOOSE_*` lines from `.env.example` into your `.env`, with `GOOSE_DBSTRING` set to the same URL as `DATABASE_URL`:
+
+   ```
+   GOOSE_DRIVER=postgres
+   GOOSE_DBSTRING=postgres://localhost:5432/sendmail?sslmode=disable
+   GOOSE_MIGRATION_DIR=internal/migrations/sql
+   ```
+
+3. **Run goose from the repository root**, because the migrations path is relative to it.
+
+### Commands
+
+| What you want | Command |
+|---|---|
+| See what is applied and what is pending | `goose status` |
+| Show the current version number | `goose version` |
+| Apply **all** pending migrations | `goose up` |
+| Apply only the **next** one | `goose up-by-one` |
+| Apply up to and including number 2 | `goose up-to 2` |
+| Undo only the **last** applied one | `goose down` |
+| Undo newest-first until 1 is the newest applied | `goose down-to 1` |
+| Undo **everything** (drops all tables and their data) | `goose reset` |
+| Undo the last one and re-apply it | `goose redo` |
+| Check the migration files for mistakes | `goose validate` |
+| Create the next numbered file | `goose -s create add_failed_at sql` |
+
+Numbers are the leading digits of the file name (`00002_...` is `2`). Note the option `-s` goes **before** `create`; it makes the file name `00004_add_failed_at.sql` instead of a timestamp.
+
+### Read this before running destructive commands
+
+- **Goose asks for no confirmation.** `goose reset`, `goose down-to ...` and `goose down` run immediately, and rolling back `00001` deletes the `batches` and `email_jobs` tables **and all their data**. Run `goose status` first.
+- **Use your development database only.** Keep the URL of any shared, staging or production database out of the `.env` that goose reads, so a mistyped command can only hit your own.
+- **A number that does not exist is not an error:** `goose up-to 99` simply applies everything. Check `goose status` for the real numbers.
+
+### Making a schema change (for example adding a column)
+
+1. `goose -s create add_failed_at sql` creates `internal/migrations/sql/00004_add_failed_at.sql`.
 2. Write the change under `-- +goose Up` (`ALTER TABLE email_jobs ADD COLUMN failed_at TIMESTAMPTZ;`) and its exact reverse under `-- +goose Down`.
-3. Run the tests, then start the server (or `migrate up`). Commit the file with the code that needs it.
+3. Run `goose validate`, apply it with `goose up`, try `goose down` and `goose up` again to prove the rollback works, then run the tests. Commit the file together with the code that needs it.
 
 Rules of thumb: never edit a migration that has already been applied anywhere (add a new one instead); one focused change per file; build indexes on large tables with `CREATE INDEX CONCURRENTLY` and a `-- +goose NO TRANSACTION` line, as `00003` does.
 
-**Production deploys:** set `AUTO_MIGRATE=false` to run migrations as a separate step (`migrate up`) before starting the new version. The server then refuses to start if the database is behind, instead of failing later on real requests.
+### Production deploys
+
+Set `AUTO_MIGRATE=false` to run migrations as a separate step before starting the new version. The server then refuses to start if the database is behind, instead of failing later on real requests. In that setup, pass the goose settings as real environment variables (`GOOSE_DRIVER`, `GOOSE_DBSTRING`, `GOOSE_MIGRATION_DIR`) in your deploy step rather than through a `.env` file, and run `goose up`.
 
 ## SMTP encryption and runtime settings
 

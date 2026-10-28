@@ -7,7 +7,9 @@
 // same schema, and makes schema changes reviewable like any other code.
 //
 // The SQL files live in ./sql and are embedded in the binary, so deploying the
-// server is a single file with nothing to copy alongside it.
+// server is a single file with nothing to copy alongside it. The server applies
+// pending migrations itself at startup; for manual work (status, rollbacks,
+// creating files) developers use the goose command-line tool on the same files.
 package migrations
 
 import (
@@ -51,52 +53,16 @@ func Up(ctx context.Context, db *sql.DB) ([]*goose.MigrationResult, error) {
 	return p.Up(ctx)
 }
 
-// UpByOne applies only the next pending migration. It returns ErrNoNextVersion
-// (from goose) when nothing is pending.
-func UpByOne(ctx context.Context, db *sql.DB) (*goose.MigrationResult, error) {
-	p, err := provider(db)
-	if err != nil {
-		return nil, err
-	}
-	return p.UpByOne(ctx)
-}
-
-// UpTo applies pending migrations up to and including version.
-func UpTo(ctx context.Context, db *sql.DB, version int64) ([]*goose.MigrationResult, error) {
-	p, err := provider(db)
-	if err != nil {
-		return nil, err
-	}
-	return p.UpTo(ctx, version)
-}
-
-// DownTo rolls back migrations, newest first, until version is the newest one
-// still applied. Version 0 rolls back everything.
-func DownTo(ctx context.Context, db *sql.DB, version int64) ([]*goose.MigrationResult, error) {
-	p, err := provider(db)
-	if err != nil {
-		return nil, err
-	}
-	return p.DownTo(ctx, version)
-}
-
 // Down rolls back the single most recently applied migration.
 // Rolling back 00001 drops the batches and email_jobs tables and their data.
+// The server never calls it; it exists so tests can prove every Down section works.
+// For day-to-day rollbacks use the goose command-line tool (see the README).
 func Down(ctx context.Context, db *sql.DB) (*goose.MigrationResult, error) {
 	p, err := provider(db)
 	if err != nil {
 		return nil, err
 	}
 	return p.Down(ctx)
-}
-
-// Status lists every known migration with whether (and when) it was applied.
-func Status(ctx context.Context, db *sql.DB) ([]*goose.MigrationStatus, error) {
-	p, err := provider(db)
-	if err != nil {
-		return nil, err
-	}
-	return p.Status(ctx)
 }
 
 // Pending reports whether the database is behind the migrations in this binary.

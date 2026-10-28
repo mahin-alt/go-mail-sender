@@ -86,7 +86,7 @@ func main() {
 	} else if pending, err := migrations.Pending(migCtx, db); err != nil {
 		log.Fatalf("check database migrations: %v", err)
 	} else if pending {
-		log.Fatalf("database has pending migrations and AUTO_MIGRATE is off: run `go run ./cmd/migrate up` first")
+		log.Fatalf("database has pending migrations and AUTO_MIGRATE is off: run `goose up` first (see Database migrations in the README)")
 	}
 	st := store.New(db)
 
