@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button'
-import Tag from 'primevue/tag'
+import StatusBadge from '@/components/status/StatusBadge.vue'
 import ProgressBar from 'primevue/progressbar'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -15,7 +15,7 @@ const rows = [
 </script>
 
 <template>
-  <main class="mx-auto flex max-w-3xl flex-col gap-6 p-6">
+  <main class="mx-auto flex max-w-3xl flex-col gap-6">
     <h1 class="text-xl font-semibold">Stack check (dev only)</h1>
 
     <section class="flex flex-col gap-2 rounded-lg border border-surface-200 bg-surface-0 p-4">
@@ -34,11 +34,14 @@ const rows = [
         <span class="rounded-md bg-primary px-2 py-1 text-primary-contrast">bg-primary token</span>
       </div>
       <ProgressBar :value="38" />
-      <div class="flex gap-2">
-        <Tag severity="success" value="Sent" />
-        <Tag severity="danger" value="Failed" />
-        <Tag severity="warn" value="Skipped (invalid)" />
-        <Tag severity="secondary" value="Pending" />
+      <div class="flex flex-wrap gap-2">
+        <StatusBadge status="sent" />
+        <StatusBadge status="failed" />
+        <StatusBadge status="invalid" />
+        <StatusBadge status="pending" />
+        <StatusBadge status="pending" :attempts="2" :max-attempts="4" />
+        <StatusBadge status="processing" />
+        <StatusBadge status="completed" />
       </div>
     </section>
 

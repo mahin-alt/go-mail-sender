@@ -13,7 +13,7 @@ MONITOR   Failures           (hidden until the Failures endpoint exists)
 Settings
 ```
 
-Templates, Recipients and Activity Log are not in the MVP and are not shown. Routes: `/`, `/bulk-emails`, `/bulk-emails/new`, `/bulk-emails/:id`, `/single-email`, `/verify`, `/failures`, `/settings`. The top of every page: title, a breadcrumb when nested, the primary action on the right.
+Templates, Recipients and Activity Log are not in the MVP and are not shown. In the code, a route appears in the sidebar only once it declares `meta.nav` (see implementation notes), so each phase adds its menu entry when its page works. Routes: `/`, `/bulk-emails`, `/bulk-emails/new`, `/bulk-emails/:id`, `/single-email`, `/verify`, `/failures`, `/settings`. The top of every page: title, a breadcrumb when nested, the primary action on the right.
 
 ## Screens
 

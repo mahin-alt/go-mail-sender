@@ -88,3 +88,15 @@ If a major version turns out to need code changes we did not plan for, record it
 - `vue-demi` (pulled in by TanStack Query) has an install script npm reports as not yet allowed; the app works without it since the library selects Vue 3 by default.
 - `/dev/stack-check` (dev server only) is the verification page for this phase; delete it when it stops being useful.
 - **Font changed to IBM Plex Sans (user's choice, 2026-10-28).** Replaces Inter; Bangla still falls through to Noto Sans Bengali. Re-checked in the browser after the swap.
+
+## Phase 1 results (2026-10-28)
+
+- **Menu is built from route meta** (`src/router/meta.ts`, `useNavItems`): a page appears in the sidebar only when its route declares `meta.nav`. That is how the design rule "no coming-soon items" is enforced; each phase adds `meta.nav` to its route when the page works. Today only Overview is listed.
+- **Layout:** `AppShell` + `AppSidebar` (`rail` prop = icon rail from 1024px, full labels from 1280px; below 1024px a PrimeVue `Drawer` opened from a top bar), skip link, `<main id="main">`. In the rail the labels are visually hidden but still announced (`sr-only xl:not-sr-only`).
+- **API client:** `src/api/client.ts` (single axios instance, `VITE_API_BASE`, default `http://localhost:8080`, 30 s timeout); `src/api/errors.ts` turns every failure into an `ApiError` with `kind` `network` / `timeout` / `http` and the server's `{error}` text. Cancellations pass through.
+- **Types:** `src/types/api.ts` mirrors the Go JSON for existing endpoints only (batches, jobs, retry, parse, create batch, stats, settings, health).
+- **`StatusBadge`** (`src/components/status/`): `describeStatus()` maps status to label, PrimeVue severity and Lucide icon; a pending job with attempts shows "Retrying 2 of 4"; the spinner only rotates for "Sending" and only when motion is allowed.
+- **Connection indicator:** `useApiHealth` polls `/healthz` every 30 s (one retry) and the sidebar footer shows connected / unreachable / checking as dot + text.
+- **Verified in a browser against the real Go API on :8080:** `/healthz` returned 200 over CORS with no proxy; the indicator turned red after the API was stopped; sidebar is 56 px at 1100 px wide and a 256 px drawer at 800 px; page titles update the tab title.
+- `.claude/launch.json` now also has an `api` entry (`go run ./cmd/server`, port 8080) for starting the backend from the app.
+- A `Drawer` width utility (`w-64`) overrides the PrimeVue default without `!important`, which confirms the layer order again.
