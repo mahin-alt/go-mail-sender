@@ -1,0 +1,37 @@
+/*
+ * Layer order matters: PrimeVue's component styles live in the `primevue` layer, which sits
+ * below Tailwind's `utilities`, so a utility class can override a component without `!important`.
+ * Keep this statement first. The `primevue` name must match `cssLayer.name` in src/main.ts.
+ */
+@layer theme, base, primevue, components, utilities;
+
+@import 'tailwindcss';
+@import 'tailwindcss-primeui';
+
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource-variable/noto-sans-bengali';
+
+@theme {
+  /* Latin uses IBM Plex Sans (it has no Bengali); Bengali characters fall through to Noto Sans Bengali. */
+  --font-sans: 'IBM Plex Sans Variable', 'Noto Sans Bengali Variable', system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background: var(--p-surface-50);
+    color: var(--p-surface-900);
+  }
+
+  body {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  /* Bangla needs more line height than Latin. Mark user-provided text with lang="bn" or
+     the .text-user class where it may contain Bangla. */
+  :lang(bn),
+  .text-user {
+    line-height: 1.6;
+  }
+}

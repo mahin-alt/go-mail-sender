@@ -14,8 +14,8 @@ Rule of thumb: if it is the inside of a component, change the PrimeVue token; if
 
 ## Typography
 
-- **Latin:** Inter Variable. **Bangla:** Noto Sans Bengali Variable. Both **self-hosted** from npm (`@fontsource-variable/inter`, `@fontsource-variable/noto-sans-bengali`), no Google Fonts CDN (works on an internal network, no third-party request, versions pinned).
-- Stack: `"Inter Variable", "Noto Sans Bengali Variable", system-ui, sans-serif`. The browser uses Inter for Latin and falls through to Noto for Bengali characters.
+- **Latin:** IBM Plex Sans Variable (chosen by the user on 2026-10-28, replacing Inter). **Bangla:** Noto Sans Bengali Variable. Both **self-hosted** from npm (`@fontsource-variable/ibm-plex-sans`, `@fontsource-variable/noto-sans-bengali`), no Google Fonts CDN (works on an internal network, no third-party request, versions pinned).
+- Stack: `"IBM Plex Sans Variable", "Noto Sans Bengali Variable", system-ui, sans-serif`. The browser uses Plex for Latin (Plex has no Bengali glyphs) and falls through to Noto for Bengali characters.
 - Load only weights used (variable fonts: one file each). Use `font-display: swap`. Confirm the Bengali file is split by `unicode-range`, so Latin-only pages do not download it.
 - Sizes (px / line-height): body 14/20, table cell 13/18, small/help 12/16, page title 20/28 semibold, section title 16/24 semibold. No heading larger than 20px.
 - Numbers in tables and counts: `font-variant-numeric: tabular-nums`, right-aligned.
@@ -24,7 +24,7 @@ Rule of thumb: if it is the inside of a component, change the PrimeVue token; if
 
 ## Colour
 
-Light theme only for the MVP. PrimeVue preset: Aura extended with `definePreset`, `primary` = blue palette, `surface` = slate palette. Dark mode off (`darkModeSelector: false`).
+Light theme only for the MVP. PrimeVue preset (`src/theme/preset.ts`): Aura extended with `definePreset`, `primary` = blue palette with the action colour at **blue-600** (white text on blue-500 is only 3.7:1), `surface` = slate palette. Dark mode off (`darkModeSelector: false`).
 
 Semantic status colours (text on tinted background; every pair must reach **4.5:1** at 12-13px, to be verified with a contrast checker at scaffold time):
 

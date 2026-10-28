@@ -12,4 +12,4 @@ Before changing anything under `frontend/`, read `docs/frontend/implementation-n
 - No hard-coded colours or arbitrary pixel values; use the tokens. Status is always icon + text + colour via `StatusBadge`.
 - Only write types and calls for endpoints that exist in the README API table.
 - Every interactive element is keyboard reachable with a visible focus ring; errors that need action are never auto-dismissed.
-- Finish a phase only when `npm run lint`, `typecheck` and `test` pass and the page was run against the real API; then update the feature doc.
+- Finish a phase only when `npm run lint`, `npm run type-check` and `npx vitest run` pass and the page was run against the real API; then update the feature doc.

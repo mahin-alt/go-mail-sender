@@ -55,7 +55,7 @@ frontend/
 
 ## Quality gates (per phase)
 
-`npm run lint`, `npm run typecheck`, `npm run test` pass; the page works against the real Go API and Mailpit; keyboard-only pass on new flows; the feature doc checklist and "Where we left off" updated in the same commit.
+`npm run lint`, `npm run type-check`, `npx vitest run` and `npm run build` pass; the page works against the real Go API and Mailpit; keyboard-only pass on new flows; the feature doc checklist and "Where we left off" updated in the same commit.
 
 ## Version snapshot (npm, 2026-10-28; pin exact versions at scaffold)
 
@@ -71,7 +71,20 @@ frontend/
 | pinia | 4.1.0 | decision 0004 was written assuming an older major; read its release notes first |
 | vue-router | 5.4.0 | decision 0004 said "4"; read the migration notes first |
 | chart.js / vue-chartjs | 4.6.1 / 5.3.4 | |
-| @fontsource-variable/inter, /noto-sans-bengali | 5.3.0 | |
-| lucide-vue-next | 1.0.0 | check the Lucide site for the currently recommended Vue package |
+| @fontsource-variable/ibm-plex-sans, /noto-sans-bengali | 5.3.0 | |
+| @lucide/vue | 1.63.0 | `lucide-vue-next` is deprecated in favour of this package |
 
 If a major version turns out to need code changes we did not plan for, record it in the feature doc and pick the older supported major rather than absorbing churn mid-build.
+
+## Phase 0 results (2026-10-28)
+
+- Scaffolded with the official `create-vue@3.24.0` (`--ts --router --pinia --vitest --eslint --prettier --bare`), then added the rest. It brings **oxlint + ESLint** together (`npm run lint` runs both) and `vue-tsc` for `npm run type-check`; tests run with `npx vitest run`.
+- Installed exactly: primevue 4.5.5, @primeuix/themes 2.0.3, tailwindcss + @tailwindcss/vite 4.3.3, tailwindcss-primeui 0.6.1, @tanstack/vue-query 5.105.0, axios 1.21.0, chart.js 4.6.1, vue-chartjs 5.3.4, @lucide/vue 1.63.0, the Fontsource fonts (IBM Plex Sans Variable and Noto Sans Bengali Variable) 5.3.0. The scaffold's own packages (vue, vue-router 5, pinia 4, vite 8, vitest 4, TypeScript 6) keep the generator's ranges; `package-lock.json` pins what is installed. Needs Node `^22.18` or `>=24.12`.
+- **Layering confirmed in a browser.** `src/styles/main.css` declares `@layer theme, base, primevue, components, utilities;` first, and `src/main.ts` passes the same order to PrimeVue's `cssLayer`. A `bg-red-600` utility on a PrimeVue Button overrode it with no `!important`.
+- **Fonts confirmed.** Bangla renders with Noto Sans Bengali; the Bengali subset downloads only when Bengali characters are on the page (Fontsource splits by `unicode-range`), and Latin stays on the Latin font (Inter at the time of the check; swapped to IBM Plex Sans afterwards, see below).
+- **Dark mode off confirmed:** with the OS in dark mode the app stays light.
+- **Contrast fix:** Aura's default primary button (white on blue-500) measured 3.68:1, below the 4.5:1 target. The preset now uses blue-600 (5.17:1). The status tags measured 4.52-6.92:1 (the amber "Skipped" tag is the tightest at 4.52, keep an eye on it).
+- `npm audit`: 2 moderate findings, both in `vitest`'s `@vitest/mocker`, dev-only (0 in production dependencies). Revisit when a patched Vitest is out.
+- `vue-demi` (pulled in by TanStack Query) has an install script npm reports as not yet allowed; the app works without it since the library selects Vue 3 by default.
+- `/dev/stack-check` (dev server only) is the verification page for this phase; delete it when it stops being useful.
+- **Font changed to IBM Plex Sans (user's choice, 2026-10-28).** Replaces Inter; Bangla still falls through to Noto Sans Bengali. Re-checked in the browser after the swap.

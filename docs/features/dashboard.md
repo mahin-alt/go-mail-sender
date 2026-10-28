@@ -1,14 +1,14 @@
 # Feature: Dashboard
 
-**Status:** in progress (backend APIs done and merged to `main`; frontend design approved, not started)
-**Branches:** backend merged into `main` (fast-forward, not pushed). Frontend work: `feat/dashboard-frontend` (from `main`)
-**Frontend location:** `frontend/` (not created yet). Design docs: [docs/frontend/](../frontend/)
+**Status:** in progress (backend APIs done and merged to `main`; frontend: Phase 0 scaffold done, Phase 1 next)
+**Branches:** backend merged into `main` (fast-forward; `origin` push pending). Frontend work: `feat/dashboard-frontend` (from `main`)
+**Frontend location:** `frontend/`. Design docs: [docs/frontend/](../frontend/)
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done:** merged backend into `main`; wrote the frontend design docs ([docs/frontend/](../frontend/)); user approved the design and chose PrimeVue 4.5.5 ([decision 0006](../decisions/0006-primevue-version-and-license.md)); docs committed on `main` locally (push to `origin` pending: needs the user's credentials). No frontend code yet.
-- **Next (needs the user's go-ahead):** Phase 0, scaffold `frontend/` (pin versions; read Vue Router 5 and Pinia 4 migration notes first).
-- **Blocked on / waiting for the user:** (1) the user must run `git push origin main`; (2) the go-ahead to start Phase 0.
+- **Last done:** Phase 0 on `feat/dashboard-frontend`: `frontend/` scaffolded with the official generator and the full stack installed and configured; lint, type-check, tests and build pass; fonts, theme and Tailwind/PrimeVue layering verified in a browser ([results](../frontend/implementation-notes.md)). Not committed yet.
+- **Next (needs the user's go-ahead):** Phase 1, app shell: layout, sidebar, router, API client, typed API shapes, `StatusBadge`.
+- **Blocked on / waiting for the user:** (1) commit Phase 0; (2) `git push origin main` is still pending (needs the user's credentials); (3) go-ahead for Phase 1.
 - **Updated:** 2026-10-28
 
 ## Why
@@ -42,7 +42,7 @@ Settings
 - **Retry** requeues only `failed` jobs with fresh attempts, wakes the workers, and reopens a completed batch. `invalid` rows are never retried (no rendered email exists).
 - **Paged jobs endpoint keeps the old plain-array response** when no `limit`/`offset`/`q` is sent, so existing callers do not break.
 - **Stats:** `tz` query param decides where "today" starts. A failure's time is the job's `updated_at` (there is no `failed_at` column yet). "Needs attention" = batches with unresolved failed jobs, or >= 20% invalid rows within 30 days. Small partial indexes keep the queries cheap.
-- **Frontend choices (2026-10-28):** merge backend to `main` first, then branch; npm; dev calls the API directly via CORS (no proxy); PrimeVue **plus Tailwind v4**; light theme only for the MVP. **Because:** see [decisions 0003, 0004, 0006](../decisions/) and [docs/frontend/design-brief.md](../frontend/design-brief.md).
+- **Frontend choices (2026-10-28):** merge backend to `main` first, then branch; npm; dev calls the API directly via CORS (no proxy); PrimeVue **plus Tailwind v4**; light theme only for the MVP; Latin font IBM Plex Sans (Bangla: Noto Sans Bengali). **Because:** see [decisions 0003, 0004, 0006](../decisions/) and [docs/frontend/design-brief.md](../frontend/design-brief.md).
 - **Migrations** are goose files applied at startup; existing databases adopt them safely ([decision 0001](../decisions/0001-use-goose-migrations.md)).
 
 ## Tasks
@@ -64,7 +64,7 @@ Settings
 One phase at a time; each ends with lint, typecheck, tests, a real run against the Go API and Mailpit, and a docs update. Pages are specified in [screens-and-flows.md](../frontend/screens-and-flows.md).
 - [x] Design docs written and approved: [docs/frontend/](../frontend/)
 - [x] PrimeVue version decided: 4.5.5 ([0006](../decisions/0006-primevue-version-and-license.md))
-- [ ] Phase 0: scaffold `frontend/` (Vue 3, TypeScript, Vite, Tailwind v4, PrimeVue + theme preset, fonts, Pinia, TanStack Query, axios, ESLint + Prettier, Vitest); check Bangla rendering and PrimeVue/Tailwind layering
+- [x] Phase 0: scaffold `frontend/` (Vue 3, TypeScript, Vite, Tailwind v4, PrimeVue + theme preset, fonts, Pinia, TanStack Query, axios, ESLint + Prettier, Vitest); check Bangla rendering and PrimeVue/Tailwind layering
 - [ ] Phase 1: app shell: layout, sidebar, router, API client, typed API shapes, StatusBadge
 - [ ] Phase 2: Bulk Emails list and detail (polling, Retry)
 - [ ] Phase 3: New Bulk Email wizard

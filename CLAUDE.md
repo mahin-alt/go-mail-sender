@@ -1,6 +1,6 @@
 # go-mail-sender
 
-A Go service that sends operational emails (order updates, merchant and customer notices) from uploaded `.xlsx` files, plus a Vue dashboard for staff (separate deploy, lives in `frontend/`, design proposed, not started yet).
+A Go service that sends operational emails (order updates, merchant and customer notices) from uploaded `.xlsx` files, plus a Vue dashboard for staff (separate deploy, lives in `frontend/`, Phase 0 scaffold done).
 
 ## Read first (in this order)
 
@@ -37,6 +37,8 @@ A Go service that sends operational emails (order updates, merchant and customer
 go build ./... && go vet ./... && go test ./...   # fast checks (DB tests are skipped without TEST_DATABASE_URL)
 go run ./cmd/server                               # run the API (applies migrations on startup)
 ```
+
+Frontend (`cd frontend`, Node 22.18+): `npm install`, `npm run dev` (:5173), `npm run lint`, `npm run type-check`, `npx vitest run`, `npm run build`. See [frontend/README.md](frontend/README.md).
 
 Dev services: PostgreSQL on `localhost:5432` (database `sendmail`), Mailpit SMTP on `:1025` with its UI on `:8025`.
 
