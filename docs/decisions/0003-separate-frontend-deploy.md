@@ -8,7 +8,7 @@ The Vue dashboard could be embedded in the Go binary (one deployable, no CORS) o
 ## Decision
 - Deploy the frontend **separately**. The Go API therefore sends CORS headers for origins listed in `CORS_ALLOWED_ORIGINS` (default `http://localhost:5173`).
 - Keep one repository: add `frontend/` next to the existing Go code. Do **not** move the Go code into `backend/` (it would churn `go.mod`, imports, README and CI for no functional gain).
-- The frontend reads the API address from `VITE_API_BASE`; in development Vite proxies to `:8080`.
+- The frontend reads the API address from `VITE_API_BASE`. In development it calls the Go API at `http://localhost:8080` **directly** and relies on CORS (no Vite proxy), so dev behaves like production. Chosen 2026-10-28; this replaces the earlier plan to proxy.
 
 ## Consequences
 - Two things to deploy and version together; the README API table is the contract between them.

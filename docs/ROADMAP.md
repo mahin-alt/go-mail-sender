@@ -7,7 +7,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Feature | Status | Doc | Notes |
 |---|---|---|---|
 | Dashboard: backend APIs | done | [features/dashboard.md](features/dashboard.md) | batch list, paged jobs, retry, stats, settings, STARTTLS, CORS, goose |
-| Dashboard: Vue frontend | next | [features/dashboard.md](features/dashboard.md) | `frontend/`, nothing built yet |
+| Dashboard: Vue frontend | next (design approved) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/dashboard-frontend`; design approved, PrimeVue 4.5.5; next is Phase 0 scaffold |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |
@@ -16,12 +16,9 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 
 ## Branches
 
-Work so far is stacked; merge in this order:
+`feat/dashboard-api` and `feat/db-migrations` (backend APIs, goose migrations, project docs) were merged into local `main` on 2026-10-28 by fast-forward. `main` was pushed to `origin` on 2026-10-28.
 
-1. `feat/dashboard-api`: batch list, jobs paging, retry, CORS, STARTTLS, settings, stats
-2. `feat/db-migrations` (on top of 1): goose migrations
-
-Nothing is merged to `main` yet.
+Active: `feat/dashboard-frontend` (from `main`).
 
 ## Starting a new feature
 
