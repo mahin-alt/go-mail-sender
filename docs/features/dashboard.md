@@ -4,6 +4,13 @@
 **Branches:** `feat/dashboard-api` (from `main`), then `feat/db-migrations` stacked on top
 **Frontend location:** `frontend/` (not created yet)
 
+## Where we left off
+> Update this at the end of every chunk of work, in the same commit. A new session reads this first.
+- **Last done:** backend APIs (batches, jobs, retry, stats, settings, SMTP test-send, CORS) and goose migrations; project docs written and committed.
+- **Next (needs the user's go-ahead):** Failures endpoint + stuck-job recovery, then scaffold `frontend/`.
+- **Blocked on / waiting for the user:** nothing is merged to `main` yet; merge order is in [ROADMAP.md](../ROADMAP.md).
+- **Updated:** 2026-10-28
+
 ## Why
 Staff need a web interface to send and monitor bulk emails instead of calling the API by hand. See [PROJECT.md](../PROJECT.md).
 

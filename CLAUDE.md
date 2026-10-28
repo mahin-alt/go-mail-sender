@@ -6,11 +6,15 @@ A Go service that sends operational emails (order updates, merchant and customer
 
 1. [docs/PROJECT.md](docs/PROJECT.md): goal, users, use cases, glossary, non-goals
 2. [docs/ROADMAP.md](docs/ROADMAP.md): every feature and its status
-3. `docs/features/<feature>.md`: plan, design decisions and checklist for the feature being worked on
+3. `docs/features/<feature>.md`: start with its **"Where we left off"** section (last done / next / blocked), then the plan, decisions and checklist. The feature is usually the one matching the current git branch; also check `git status` and `git log -5`
 4. [docs/decisions/](docs/decisions/): project-wide decisions and why (goose, no auth yet, separate frontend...)
 5. [README.md](README.md): how to run it, the API table, migrations setup
 
 ## Working rules
+
+- **Keep "Where we left off" current.** After finishing any chunk of work, update that section in the feature doc (last done, next, blocked, date) and tick the checkboxes, in the same commit as the code. Do it before ending the turn, also when work is paused half done (say what is unfinished and why).
+- **Ask before starting the next piece of work.** When a task is finished, report it and propose the next step as one clear question. Do not begin the next roadmap item, branch or feature until the user says yes.
+- **Explain options and recommend.** When there are several ways to do something (design, architecture, library, approach), lay out the realistic options in plain beginner language: what each is, its trade-offs, and when it fits. Then give a clear recommendation and why, and let the user choose before building. Record the outcome in the feature doc, or in `docs/decisions/` if it is project-wide.
 
 - **Definition of done:** tests pass, the checkbox in the feature doc is ticked, docs/README updated if behaviour changed. Commit only when the user asks.
 - **Never write test data to the developer's real database** (the `DATABASE_URL` in `.env`). Read-only checks against it are fine. Use a scratch schema or an isolated Postgres for anything that writes.
