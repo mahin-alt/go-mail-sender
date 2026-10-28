@@ -16,7 +16,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 
 ## Branches
 
-`feat/dashboard-api` and `feat/db-migrations` (backend APIs, goose migrations, project docs) were merged into local `main` on 2026-10-28 by fast-forward. `main` was pushed to `origin` on 2026-10-28.
+`feat/dashboard-api` and `feat/db-migrations` (backend APIs, goose migrations, project docs) were merged into local `main` on 2026-10-28 by fast-forward. Local `main` is ahead of `origin/main`; **push pending** (the user pushes from their own terminal).
 
 Active: `feat/dashboard-frontend` (from `main`).
 

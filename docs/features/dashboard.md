@@ -6,9 +6,9 @@
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done:** merged backend into `main`; wrote the frontend design docs ([docs/frontend/](../frontend/)); user approved the design and chose PrimeVue 4.5.5 ([decision 0006](../decisions/0006-primevue-version-and-license.md)); docs committed and `main` pushed. No frontend code yet.
+- **Last done:** merged backend into `main`; wrote the frontend design docs ([docs/frontend/](../frontend/)); user approved the design and chose PrimeVue 4.5.5 ([decision 0006](../decisions/0006-primevue-version-and-license.md)); docs committed on `main` locally (push to `origin` pending: needs the user's credentials). No frontend code yet.
 - **Next (needs the user's go-ahead):** Phase 0, scaffold `frontend/` (pin versions; read Vue Router 5 and Pinia 4 migration notes first).
-- **Blocked on / waiting for the user:** nothing; waiting for the go-ahead to start Phase 0.
+- **Blocked on / waiting for the user:** (1) the user must run `git push origin main`; (2) the go-ahead to start Phase 0.
 - **Updated:** 2026-10-28
 
 ## Why
