@@ -7,7 +7,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Feature | Status | Doc | Notes |
 |---|---|---|---|
 | Dashboard: backend APIs | done | [features/dashboard.md](features/dashboard.md) | batch list, paged jobs, retry, stats, settings, STARTTLS, CORS, goose |
-| Dashboard: Vue frontend | in progress (Phase 1 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/dashboard-frontend`; app shell done, pages are placeholders; next Phase 2 |
+| Dashboard: Vue frontend | in progress (Phase 1 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-bulk-emails`; app shell done, pages are placeholders; next Phase 2 |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |
@@ -20,7 +20,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 
 `feat/dashboard-api` and `feat/db-migrations` (backend APIs, goose migrations, project docs) were merged into local `main` on 2026-10-28 by fast-forward. Local `main` is ahead of `origin/main`; **push pending** (the user pushes from their own terminal).
 
-Active: `feat/dashboard-frontend` (Phases 0-1, awaiting merge) and `feat/frontend-bulk-emails` (Phase 2, cut from it). Rule: one short branch per phase from `main`, see [decisions/0008](decisions/0008-branch-per-phase.md).
+Phases 0-1 of the frontend (`feat/dashboard-frontend`) and the Phase 2 decisions were merged into local `main` on 2026-10-29 by fast-forward; **push of `main` still pending**. Active: `feat/frontend-bulk-emails` (Phase 2, cut from `main`). Rule: one short branch per phase from `main`, see [decisions/0008](decisions/0008-branch-per-phase.md).
 
 ## Starting a new feature
 

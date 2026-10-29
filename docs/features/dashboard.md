@@ -1,14 +1,14 @@
 # Feature: Dashboard
 
 **Status:** in progress (backend APIs done and merged to `main`; frontend: bare scaffold with the stack installed, all UI code removed on request)
-**Branches:** backend merged into `main` (fast-forward; `origin` push pending). Frontend work: `feat/dashboard-frontend` (from `main`)
+**Branches:** backend and frontend Phases 0-1 are merged into local `main` (fast-forward; `origin` push pending). Frontend Phase 2: `feat/frontend-bulk-emails` (from `main`)
 **Frontend location:** `frontend/`. No design system or frontend design docs (deleted on purpose; visual decisions come from the ui-ux-pro-max skill). The web UI will be branded **MailFlow**.
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
 - **Last done (2026-10-29):** **Phase 1 built and verified** (not committed yet): MailFlow app shell with the Bento sidebar (open by default, collapse button, hover-open rail, content pushed, choice remembered in localStorage), paper plane logo and SVG favicon, PageHeader, six routes (Dashboard first) with placeholder pages and a 404, typed API client (`src/api`, `ApiError`) and API types for the existing endpoints, `StatusBadge` + `statusMeta`, API online/offline indicator in the sidebar (polls `/healthz`), PrimeVue theme preset (black primary), Plus Jakarta Sans + Noto Sans Bengali bundled, tokens in `styles/main.css`. Chosen look and sizes are in [decision 0007](../decisions/0007-frontend-visual-style.md) (18px bold tile titles, 11px CAPS column headers, darker text colours for contrast). Checked: lint, type-check, 27 unit tests, production build; in the browser at 1280px (open 234px/content 262px, rail 70/98, hover pushes content, route + title + current-page marking) and at 375px (top bar, no sideways scroll); API indicator online (real API on :8080, `/healthz` only, no writes) and offline (unreachable URL). Commits made earlier: `d30fbfb` (remove test UI), `26f3865` (docs: style, logo, font).
 - **Next:** build Phase 2 (Bulk Emails list and detail) on branch `feat/frontend-bulk-emails`. All Phase 2 decisions are made: filename as row title ([0009](../decisions/0009-bulk-email-row-title.md)); always-on polling, list 5 s / detail 3 s ([0010](../decisions/0010-live-progress-polling.md); server push is a wanted future improvement); status tabs + filename search, 20 per page; side panel for an email's detail; a short **Retry** button (icon + word) with a confirmation for the batch-level one; no CSV export. Page specs are in [0007](../decisions/0007-frontend-visual-style.md) and `frontend/design-previews/c-bulk-emails.html`.
-- **Blocked on / waiting for the user:** (1) Phase 1 is committed (`e56d022`); (2) `git push` of `feat/dashboard-frontend` and `main` (needs the user's credentials); (3) nothing else; Phase 2 can start.
+- **Blocked on / waiting for the user:** (1) Phase 1 is committed (`e56d022`); (2) `git push` of `main` (and `feat/dashboard-frontend` if wanted; needs the user's credentials); (3) nothing else; Phase 2 can start.
 - **Updated:** 2026-10-29
 
 ## Why
