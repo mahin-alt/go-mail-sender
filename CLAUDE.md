@@ -29,6 +29,7 @@ A Go service that sends operational emails (order updates, merchant and customer
 - **Test servers:** use spare ports and stop them by PID (`kill <pid>`). Never `pkill -f` (it can match your own shell). Avoid `rm` through shell variables.
 - **Check the official docs / CLI of a tool before writing custom tooling around it.**
 - **Explain for a beginner.** The user is learning: say what was built, why, and the expected results. When asked for a TL;DR, give short bullets.
+- **Branching:** one short branch per phase/piece of work, cut from `main` and merged back before the next ([decision 0008](docs/decisions/0008-branch-per-phase.md)).
 - **Commit style:** conventional commits, e.g. `feat(api): ...`, `fix(mailer): ...`, `refactor(db): ...`, `docs: ...`. Small, focused commits.
 
 ## Commands

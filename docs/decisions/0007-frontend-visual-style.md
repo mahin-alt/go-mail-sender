@@ -59,12 +59,20 @@ Status is always **glyph + text + colour**, in a pill: `✓ Completed`, `↻ Sen
 Wordmark: 20px, letter-spacing -0.02em, `Mail` weight 800 + `Flow` weight 300, colour `#161616`. Collapsed sidebar shows only the plane.
 
 ## Data shown must exist in the backend
-A Bulk Email row shows its **subject** (`subject_template`) as the title and the **filename** underneath. There is no "name" and no Merchant/Customer type in the database, so the UI does not show them (the recipient-type question stays open in the feature doc). Batch statuses are `pending`, `processing`, `completed`; "Completed with failures" is derived from the job counts. Job statuses are `pending`, `processing`, `sent`, `failed`, `invalid`.
+A Bulk Email row shows its **filename** as the title (the API returns no subject for batches; see [0009](0009-bulk-email-row-title.md)). There is no "name" and no Merchant/Customer type in the database, so the UI does not show them (the recipient-type question stays open in the feature doc). Batch statuses are `pending`, `processing`, `completed`; "Completed with failures" is derived from the job counts. Job statuses are `pending`, `processing`, `sent`, `failed`, `invalid`.
 
 ## Decided after the previews (2026-10-29)
 - **Tile titles** (Last 14 days, Needs attention, Recent Bulk Emails): **18px / 700 / dark ink**, letter-spacing -0.01em. **Table column headers:** **11px / 600 / UPPERCASE**, letter-spacing 0.06em, muted. KPI labels stay 14px muted (a different role).
 - **Text colours darkened for contrast (WCAG 4.5:1)** compared with the preview: muted text `#66645E` (was `#77756F`); for small status text use `ok-ink #12704A`, `bad-ink #C62E33`, `warn-ink #8A5A00`. The original greens, reds and ambers stay for fills (bars, chart, big numbers).
 - **Mobile:** below 832px (`nav:` breakpoint, 52rem) the sidebar becomes a top bar with icons only; the collapse button and API status are hidden there.
+
+## Bulk Emails pages (Phase 2, decided 2026-10-29)
+Reference: `frontend/design-previews/c-bulk-emails.html`.
+- **List:** one tile with status tabs and counts (All, Pending, Processing, Completed) on the left and a filename search box on the right; table columns Filename (+ `#id`), Status, Progress (bar + sent/total), Failed, Invalid, Created; **20 per page** with Previous/Next and "1-20 of N". Clicking a row opens the batch.
+- **Batch detail:** "back to Bulk Emails" link, filename as title with its status badge, subtitle `Batch #id · created … · N emails`. Four counter tiles (Sent is the black one; Failed number red), a progress tile, then an Emails tile with status tabs (All, Sent, Failed, Invalid, Pending) with counts, a search (name or email), and a table: Recipient (name + email), Status, Attempts, Last error (red text), Updated, and a small round retry icon button on failed rows.
+- **Email detail = side panel** (not a dialog): opens on row click, fixed right 14px / top 14px / bottom 14px, width 440px, white, radius 24px, over a dark scrim (`rgba(22,22,22,.35)`), closes with Esc, the X button or a scrim click, focus moves to the close button. Shows status, last error box (attention colours), recipient, attempts, subject and message (rendered text), and a **Retry** button for failed emails.
+- **Retry button wording:** just the icon plus the word **Retry** (long labels like "Retry failed (12)" were rejected). Its accessible name carries the detail, e.g. `aria-label="Retry 12 failed emails"`. The batch-level Retry first opens a confirmation dialog (centered, 420px): "Retry 12 failed emails? Each one will be sent again to its recipient. Invalid rows are skipped." with Cancel and a black confirm button.
+- **No CSV export.** Row title is the filename ([0009](0009-bulk-email-row-title.md)). Progress updates by polling ([0010](0010-live-progress-polling.md)).
 
 ## Still open
 Dark mode (none for the MVP).
