@@ -1,6 +1,6 @@
-# Mail Sender dashboard (frontend)
+# MailFlow (frontend)
 
-Vue 3 + TypeScript + Vite single-page app for the Go mail-sender API. Design and architecture: [docs/frontend/](../docs/frontend/).
+Vue 3 + TypeScript + Vite single-page app for the Go mail-sender API.
 
 ```bash
 cd frontend
@@ -18,7 +18,5 @@ npm run dev                  # http://localhost:5173 (the API must allow this or
 | `npm run format` | Prettier |
 | `npm run build` | type-check + production build into `dist/` |
 
-To use the real API, start the Go server from the repo root (`go run ./cmd/server`, port 8080). The menu footer shows whether it is reachable.
-
-In dev, `/dev/stack-check` shows fonts (English + Bangla), the theme, and the PrimeVue/Tailwind layering.
+The app is currently a bare scaffold: the stack is installed and wired (`src/main.ts`, `src/styles/main.css`), with no pages or styling yet and no design system.
 Dependencies are pinned exactly (`.npmrc` has `save-exact=true`); commit `package-lock.json`.

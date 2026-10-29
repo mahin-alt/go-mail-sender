@@ -25,8 +25,8 @@ Vue 3 single-page app (Composition API, `<script setup>`):
 - Pinia is for UI state only (filters, preferences); API data belongs in TanStack Query, which handles caching, retries and `refetchInterval` polling for batch progress.
 - TypeScript because the API response shapes are known and stable (`Job`, `Batch`, stats, settings).
 
-## Design docs
-Visual direction, tokens, screens and the boundaries between these libraries: [docs/frontend/](../frontend/). Version check on 2026-10-28 found newer majors of Vue Router (5) and Pinia (4) than assumed here; pin versions at scaffold after reading their migration notes.
+## Versions
+Version check on 2026-10-28 found newer majors of Vue Router (5) and Pinia (4) than assumed here; pin versions at scaffold after reading their migration notes.
 
 ## Consequences
 - API types are hand-written (the backend has no OpenAPI spec yet).

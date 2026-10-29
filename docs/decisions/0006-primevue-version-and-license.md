@@ -19,5 +19,5 @@ The user also chose **Tailwind CSS** alongside PrimeVue (the earlier recommendat
 **PrimeVue 4.5.5 with `@primeuix/themes` 2.x (both MIT), pinned exactly.** Tailwind (v4 + `tailwindcss-primeui`) is accepted regardless of the PrimeVue version.
 
 ## Consequences
-- Tailwind v4 is configured in CSS with the Vite plugin; see [implementation-notes.md](../frontend/implementation-notes.md).
+- Tailwind v4 is configured in CSS with the Vite plugin.
 - Whichever PrimeVue major is chosen, the matching `@primeuix/themes` major must be installed.

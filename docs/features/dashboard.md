@@ -1,15 +1,15 @@
 # Feature: Dashboard
 
-**Status:** in progress (backend APIs done and merged to `main`; frontend: Phases 0-1 done, Phase 2 next)
+**Status:** in progress (backend APIs done and merged to `main`; frontend: bare scaffold with the stack installed, all UI code removed on request)
 **Branches:** backend merged into `main` (fast-forward; `origin` push pending). Frontend work: `feat/dashboard-frontend` (from `main`)
-**Frontend location:** `frontend/`. Design docs: [docs/frontend/](../frontend/)
+**Frontend location:** `frontend/`. No design system or frontend design docs (deleted on purpose; visual decisions come from the ui-ux-pro-max skill). The web UI will be branded **MailFlow**.
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done:** Phase 1 (app shell) on `feat/dashboard-frontend`: responsive layout (icon rail, full sidebar, mobile drawer, skip link), nav built from route meta, axios client with typed `ApiError`, hand-written API types, `StatusBadge`, an API-connection indicator. 13 unit tests, lint, type-check and build pass; checked in a browser against the real Go API (connected, then unreachable when stopped). Committed (Phase 0 is `29be827`, Phase 1 is the next commit on the branch); push of `feat/dashboard-frontend` and `main` is still pending (needs the user's credentials).
-- **Next (needs the user's go-ahead):** Phase 2, Bulk Emails list and detail (polling, Retry).
-- **Blocked on / waiting for the user:** (1) `git push` of both branches (`feat/dashboard-frontend`, `main`); (2) go-ahead for Phase 2.
-- **Updated:** 2026-10-28
+- **Last done (2026-10-29):** the user chose **style C (Bento Box Grid)**, the **paper plane logo** with wordmark "Mail" bold + "Flow" light, a labelled sidebar with no menu groups, and renamed Overview to **Dashboard**. Recorded with exact tokens and component specs in [decision 0007](../decisions/0007-frontend-visual-style.md). Reference previews (mock data, untracked) are in `frontend/design-previews/` (`c-bento.html`, `c-logos.html`); the sidebar is open by default, has a collapse/keep-open button, and when collapsed it opens on hover; the page content is pushed by the sidebar, never covered (details in decision 0007). Before that the earlier UI and design system were removed (bare scaffold, stack kept).
+- **Next (needs the user's go-ahead):** discuss the remaining fixes on preview C, then start the app shell (Phase 1).
+- **Blocked on / waiting for the user:** (1) commit the removal; (2) `git push` of `feat/dashboard-frontend` and `main` (needs the user's credentials); (3) the user's remaining fixes to preview C. The MailFlow name is for the web frontend only; the backend keeps `sendmail`.
+- **Updated:** 2026-10-29
 
 ## Why
 Staff need a web interface to send and monitor bulk emails instead of calling the API by hand. See [PROJECT.md](../PROJECT.md).
@@ -42,7 +42,8 @@ Settings
 - **Retry** requeues only `failed` jobs with fresh attempts, wakes the workers, and reopens a completed batch. `invalid` rows are never retried (no rendered email exists).
 - **Paged jobs endpoint keeps the old plain-array response** when no `limit`/`offset`/`q` is sent, so existing callers do not break.
 - **Stats:** `tz` query param decides where "today" starts. A failure's time is the job's `updated_at` (there is no `failed_at` column yet). "Needs attention" = batches with unresolved failed jobs, or >= 20% invalid rows within 30 days. Small partial indexes keep the queries cheap.
-- **Frontend choices (2026-10-28):** merge backend to `main` first, then branch; npm; dev calls the API directly via CORS (no proxy); PrimeVue **plus Tailwind v4**; light theme only for the MVP; Latin font IBM Plex Sans (Bangla: Noto Sans Bengali). **Because:** see [decisions 0003, 0004, 0006](../decisions/) and [docs/frontend/design-brief.md](../frontend/design-brief.md).
+- **Visual style (2026-10-29):** Bento Box Grid, paper plane logo; full spec in [decision 0007](../decisions/0007-frontend-visual-style.md). Font: Plus Jakarta Sans. Nav label "Overview" is now "Dashboard".
+- **Frontend choices (2026-10-28):** merge backend to `main` first, then branch; npm; dev calls the API directly via CORS (no proxy); PrimeVue **plus Tailwind v4**; light theme only for the MVP; **Because:** see [decisions 0003, 0004, 0006](../decisions/).
 - **Migrations** are goose files applied at startup; existing databases adopt them safely ([decision 0001](../decisions/0001-use-goose-migrations.md)).
 
 ## Tasks
@@ -60,18 +61,17 @@ Settings
 - [ ] Recover jobs stuck in `processing` after a crash
 - [ ] Optional: `failed_at` column (first new migration) for exact failure times
 
-### Frontend (design proposed, no code yet)
-One phase at a time; each ends with lint, typecheck, tests, a real run against the Go API and Mailpit, and a docs update. Pages are specified in [screens-and-flows.md](../frontend/screens-and-flows.md).
-- [x] Design docs written and approved: [docs/frontend/](../frontend/)
-- [x] PrimeVue version decided: 4.5.5 ([0006](../decisions/0006-primevue-version-and-license.md))
-- [x] Phase 0: scaffold `frontend/` (Vue 3, TypeScript, Vite, Tailwind v4, PrimeVue + theme preset, fonts, Pinia, TanStack Query, axios, ESLint + Prettier, Vitest); check Bangla rendering and PrimeVue/Tailwind layering
-- [x] Phase 1: app shell: layout, sidebar, router, API client, typed API shapes, StatusBadge
+### Frontend
+Everything below was built and verified, then removed on 2026-10-29 at the user's request; all boxes are open again.
+- [x] PrimeVue 4.5.5 chosen ([0006](../decisions/0006-primevue-version-and-license.md)); design docs and design system deleted on purpose, to be redone with the ui-ux-pro-max skill
+- [x] Phase 0: scaffold `frontend/` with the stack (kept)
+- [ ] Phase 1: app shell, API client, typed API shapes, `StatusBadge`
 - [ ] Phase 2: Bulk Emails list and detail (polling, Retry)
 - [ ] Phase 3: New Bulk Email wizard
-- [ ] Phase 4: Settings page with SMTP test email
-- [ ] Phase 5: Overview page
+- [ ] Phase 4: Settings with SMTP test email
+- [ ] Phase 5: Overview
 - [ ] Phase 6: Verify Emails and Single Email
-- [ ] Phase 7: Failures page (needs the Failures endpoint)
+- [ ] Phase 7: Failures page (needs the backend Failures endpoint)
 
 ## Open questions
 - Recipient type per upload (Merchant vs Customer)? Affects filters and the data model; undecided.

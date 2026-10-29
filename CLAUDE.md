@@ -1,6 +1,6 @@
 # go-mail-sender
 
-A Go service that sends operational emails (order updates, merchant and customer notices) from uploaded `.xlsx` files, plus a Vue dashboard for staff (separate deploy, lives in `frontend/`, Phases 0-1 done: scaffold and app shell).
+A Go service that sends operational emails (order updates, merchant and customer notices) from uploaded `.xlsx` files, plus a Vue dashboard for staff (separate deploy, lives in `frontend/`, bare scaffold with the stack installed, no pages yet).
 
 ## Read first (in this order)
 
@@ -9,7 +9,7 @@ A Go service that sends operational emails (order updates, merchant and customer
 3. `docs/features/<feature>.md`: start with its **"Where we left off"** section (last done / next / blocked), then the plan, decisions and checklist. The feature is usually the one matching the current git branch; also check `git status` and `git log -5`
 4. [docs/decisions/](docs/decisions/): project-wide decisions and why (goose, no auth yet, separate frontend...)
 5. [README.md](README.md): how to run it, the API table, migrations setup
-6. Frontend work only: [docs/frontend/](docs/frontend/) (design brief, design system, screens, implementation notes); path rules in `.claude/rules/frontend.md`
+6. Frontend work only: path rules in `.claude/rules/frontend.md`. There is no design system or design doc right now; visual decisions come from the ui-ux-pro-max skill
 
 ## Working rules
 
