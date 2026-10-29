@@ -61,6 +61,10 @@ Wordmark: 20px, letter-spacing -0.02em, `Mail` weight 800 + `Flow` weight 300, c
 ## Data shown must exist in the backend
 A Bulk Email row shows its **subject** (`subject_template`) as the title and the **filename** underneath. There is no "name" and no Merchant/Customer type in the database, so the UI does not show them (the recipient-type question stays open in the feature doc). Batch statuses are `pending`, `processing`, `completed`; "Completed with failures" is derived from the job counts. Job statuses are `pending`, `processing`, `sent`, `failed`, `invalid`.
 
+## Decided after the previews (2026-10-29)
+- **Tile titles** (Last 14 days, Needs attention, Recent Bulk Emails): **18px / 700 / dark ink**, letter-spacing -0.01em. **Table column headers:** **11px / 600 / UPPERCASE**, letter-spacing 0.06em, muted. KPI labels stay 14px muted (a different role).
+- **Text colours darkened for contrast (WCAG 4.5:1)** compared with the preview: muted text `#66645E` (was `#77756F`); for small status text use `ok-ink #12704A`, `bad-ink #C62E33`, `warn-ink #8A5A00`. The original greens, reds and ambers stay for fills (bars, chart, big numbers).
+- **Mobile:** below 832px (`nav:` breakpoint, 52rem) the sidebar becomes a top bar with icons only; the collapse button and API status are hidden there.
+
 ## Still open
-Type hierarchy of tile titles vs table column headers (the preview has toggles: tile titles 14 muted / 16 / 18 / 20 bold dark, column headers 12 muted / 11 caps / 12 lighter). KPI labels are a separate role and are not changed with them.
-Dark mode (none for the MVP), and the other fixes the user wants to discuss on the preview.
+Dark mode (none for the MVP).

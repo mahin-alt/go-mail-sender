@@ -6,9 +6,9 @@
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done (2026-10-29):** the user chose **style C (Bento Box Grid)**, the **paper plane logo** with wordmark "Mail" bold + "Flow" light, a labelled sidebar with no menu groups, and renamed Overview to **Dashboard**. Recorded with exact tokens and component specs in [decision 0007](../decisions/0007-frontend-visual-style.md). Reference previews (mock data, untracked) are in `frontend/design-previews/` (`c-bento.html`, `c-logos.html`); the sidebar is open by default, has a collapse/keep-open button, and when collapsed it opens on hover; the page content is pushed by the sidebar, never covered (details in decision 0007). Before that the earlier UI and design system were removed (bare scaffold, stack kept).
-- **Next (needs the user's go-ahead):** discuss the remaining fixes on preview C, then start the app shell (Phase 1).
-- **Blocked on / waiting for the user:** (1) commit the removal; (2) `git push` of `feat/dashboard-frontend` and `main` (needs the user's credentials); (3) the user's remaining fixes to preview C. The MailFlow name is for the web frontend only; the backend keeps `sendmail`.
+- **Last done (2026-10-29):** **Phase 1 built and verified** (not committed yet): MailFlow app shell with the Bento sidebar (open by default, collapse button, hover-open rail, content pushed, choice remembered in localStorage), paper plane logo and SVG favicon, PageHeader, six routes (Dashboard first) with placeholder pages and a 404, typed API client (`src/api`, `ApiError`) and API types for the existing endpoints, `StatusBadge` + `statusMeta`, API online/offline indicator in the sidebar (polls `/healthz`), PrimeVue theme preset (black primary), Plus Jakarta Sans + Noto Sans Bengali bundled, tokens in `styles/main.css`. Chosen look and sizes are in [decision 0007](../decisions/0007-frontend-visual-style.md) (18px bold tile titles, 11px CAPS column headers, darker text colours for contrast). Checked: lint, type-check, 27 unit tests, production build; in the browser at 1280px (open 234px/content 262px, rail 70/98, hover pushes content, route + title + current-page marking) and at 375px (top bar, no sideways scroll); API indicator online (real API on :8080, `/healthz` only, no writes) and offline (unreachable URL). Commits made earlier: `d30fbfb` (remove test UI), `26f3865` (docs: style, logo, font).
+- **Next (needs the user's go-ahead):** Phase 2, Bulk Emails list and detail (polling, Retry). It needs the `StatusBadge`, tile and table styles from decision 0007, and a PrimeVue `DataTable` themed to the 11px CAPS headers.
+- **Blocked on / waiting for the user:** (1) commit Phase 1 (suggested message `feat(frontend): app shell, API client, StatusBadge in Bento style`); (2) `git push` of `feat/dashboard-frontend` and `main` (needs the user's credentials); (3) go-ahead for Phase 2.
 - **Updated:** 2026-10-29
 
 ## Why
@@ -65,7 +65,7 @@ Settings
 Everything below was built and verified, then removed on 2026-10-29 at the user's request; all boxes are open again.
 - [x] PrimeVue 4.5.5 chosen ([0006](../decisions/0006-primevue-version-and-license.md)); design docs and design system deleted on purpose, to be redone with the ui-ux-pro-max skill
 - [x] Phase 0: scaffold `frontend/` with the stack (kept)
-- [ ] Phase 1: app shell, API client, typed API shapes, `StatusBadge`
+- [x] Phase 1: app shell, API client, typed API shapes, `StatusBadge`
 - [ ] Phase 2: Bulk Emails list and detail (polling, Retry)
 - [ ] Phase 3: New Bulk Email wizard
 - [ ] Phase 4: Settings with SMTP test email

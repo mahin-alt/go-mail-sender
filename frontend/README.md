@@ -18,5 +18,5 @@ npm run dev                  # http://localhost:5173 (the API must allow this or
 | `npm run format` | Prettier |
 | `npm run build` | type-check + production build into `dist/` |
 
-The app is currently a bare scaffold: the stack is installed and wired (`src/main.ts`, `src/styles/main.css`), with no pages or styling yet and no design system.
+Phase 1 is built: the MailFlow shell (sidebar, header, routes), the API client and `StatusBadge`. Pages are placeholders until their phase. Look and tokens: [decision 0007](../docs/decisions/0007-frontend-visual-style.md); the static reference page is `design-previews/c-bento.html`.
 Dependencies are pinned exactly (`.npmrc` has `save-exact=true`); commit `package-lock.json`.

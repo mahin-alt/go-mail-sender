@@ -1,6 +1,6 @@
 # go-mail-sender
 
-A Go service that sends operational emails (order updates, merchant and customer notices) from uploaded `.xlsx` files, plus a Vue dashboard for staff (separate deploy, lives in `frontend/`, bare scaffold with the stack installed, no pages yet).
+A Go service that sends operational emails (order updates, merchant and customer notices) from uploaded `.xlsx` files, plus a Vue dashboard for staff (separate deploy, lives in `frontend/`, Phase 1 done: app shell, API client, StatusBadge; pages are placeholders).
 
 ## Read first (in this order)
 

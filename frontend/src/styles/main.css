@@ -1,8 +1,53 @@
 /*
- * Wiring only, no design. Layer order lets Tailwind utilities override PrimeVue component styles
- * without `!important`; the `primevue` name must match `cssLayer.name` in src/main.ts.
+ * Tokens come from docs/decisions/0007-frontend-visual-style.md. The layer order lets Tailwind
+ * utilities override PrimeVue component styles without `!important`; the `primevue` name must
+ * match `cssLayer.name` in src/theme/preset.ts and src/main.ts.
  */
 @layer theme, base, primevue, components, utilities;
 
 @import 'tailwindcss';
 @import 'tailwindcss-primeui';
+@import '@fontsource-variable/plus-jakarta-sans';
+@import '@fontsource-variable/noto-sans-bengali';
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans Variable', 'Noto Sans Bengali Variable', system-ui, sans-serif;
+
+  --color-page: #efeeea;
+  --color-tile: #ffffff;
+  --color-ink: #161616;
+  --color-muted: #66645e; /* darker than the 0007 spec (#77756f) so text reaches 4.5:1 on the page */
+  --color-track: #e4e2dc;
+  --color-hairline: #efeeea;
+  --color-hover: #f1f0ec;
+  --color-pill: #f3f2ee;
+  --color-note: #f5f4f0;
+  --color-attn: #ffe9c7;
+  --color-attn-ink: #4a3410;
+  --color-brand: #ff6b2c; /* logo only */
+  /* Fills (charts, bars, big numbers) and the darker "ink" variants for small text. */
+  --color-ok: #1f9d63;
+  --color-ok-ink: #12704a;
+  --color-bad: #e5484d;
+  --color-bad-ink: #c62e33;
+  --color-warn: #c98a0b;
+  --color-warn-ink: #8a5a00;
+
+  --radius-tile: 1.5rem; /* 24px */
+  --radius-inner: 1rem; /* 16px */
+
+  /* Sidebar panel width (open / icon rail) and the page's left padding that makes room for it. */
+  --spacing-sidebar-open: 14.625rem; /* 234px */
+  --spacing-sidebar-rail: 4.375rem; /* 70px */
+  --spacing-shell-open: 16.375rem; /* 262px */
+  --spacing-shell-rail: 6.125rem; /* 98px */
+
+  /* Below this width the sidebar becomes a top bar (`nav:` variant = at or above). */
+  --breakpoint-nav: 52rem;
+}
+
+@layer base {
+  body {
+    @apply bg-page font-sans text-ink antialiased;
+  }
+}
