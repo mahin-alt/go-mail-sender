@@ -7,7 +7,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Feature | Status | Doc | Notes |
 |---|---|---|---|
 | Dashboard: backend APIs | done | [features/dashboard.md](features/dashboard.md) | batch list, paged jobs, retry, stats, settings, STARTTLS, CORS, goose |
-| Dashboard: Vue frontend | in progress (Phase 1 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-bulk-emails`; app shell done, pages are placeholders; next Phase 2 |
+| Dashboard: Vue frontend | in progress (Phases 1-2 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-bulk-emails`; app shell and Bulk Emails done; next Phase 3 wizard |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |

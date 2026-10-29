@@ -18,5 +18,5 @@ npm run dev                  # http://localhost:5173 (the API must allow this or
 | `npm run format` | Prettier |
 | `npm run build` | type-check + production build into `dist/` |
 
-Phase 1 is built: the MailFlow shell (sidebar, header, routes), the API client and `StatusBadge`. Pages are placeholders until their phase. Look and tokens: [decision 0007](../docs/decisions/0007-frontend-visual-style.md); the static reference page is `design-previews/c-bento.html`.
+Built so far: the MailFlow shell (sidebar, header, routes), the API client, `StatusBadge`, and the Bulk Emails list and detail pages. Other pages are placeholders until their phase. Look and tokens: [decision 0007](../docs/decisions/0007-frontend-visual-style.md); the static reference page is `design-previews/c-bento.html`.
 Dependencies are pinned exactly (`.npmrc` has `save-exact=true`); commit `package-lock.json`.

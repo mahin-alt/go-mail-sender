@@ -51,3 +51,8 @@
     @apply bg-page font-sans text-ink antialiased;
   }
 }
+
+/* Text that may be Bangla (names, subjects, messages, errors): Bangla glyphs need more line height. */
+@utility text-user {
+  line-height: 1.7;
+}

@@ -16,3 +16,18 @@ if (typeof globalThis.localStorage?.clear !== 'function') {
   }
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true })
 }
+
+// jsdom has no matchMedia, which PrimeVue overlays (Drawer, Dialog) ask for.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}

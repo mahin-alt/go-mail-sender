@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import PrimeVue from 'primevue/config'
+import ToastService from 'primevue/toastservice'
 
 import App from './App.vue'
 import router from './router'
@@ -24,5 +25,7 @@ app.use(PrimeVue, {
     },
   },
 })
+
+app.use(ToastService)
 
 app.mount('#app')
