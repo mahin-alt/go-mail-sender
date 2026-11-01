@@ -1,14 +1,14 @@
 # Feature: Dashboard
 
 **Status:** in progress (backend APIs done and merged to `main`; frontend: bare scaffold with the stack installed, all UI code removed on request)
-**Branches:** backend and frontend Phases 0-1 are merged into local `main` (fast-forward; `origin` push pending). Frontend Phase 2: `feat/frontend-bulk-emails` (from `main`)
+**Branches:** backend and frontend Phases 0-1 are merged into local `main` (fast-forward; pushed to `origin`). Frontend Phase 2 merged too; Phase 3: `feat/frontend-new-bulk-email` (from `main`)
 **Frontend location:** `frontend/`. No design system or frontend design docs (deleted on purpose; visual decisions come from the ui-ux-pro-max skill). The web UI will be branded **MailFlow**.
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done (2026-10-29):** **Phase 2 built and verified** (uncommitted, on `feat/frontend-bulk-emails`): Bulk Emails list (status tabs with counts, filename search, 20 per page, filters kept in the URL) and batch detail (counter tiles, progress, status tabs with counts from the batch counters, name/email search, paged emails table, side panel for one email, **Retry** with a confirmation for the whole batch and a per-email retry button, success/error toasts, 404 and error states), always-on polling (list 5 s, detail 3 s), `src/api/batches.ts`, TanStack Query hooks, PrimeVue Drawer/Dialog/Toast/Button themed to the Bento look, a "New Bulk Email" placeholder route (Phase 3), `.text-user` utility for Bangla line height. Decisions: 0007 (page specs), 0008, 0009, 0010. Checked: lint, type-check, 50 unit tests, production build; in the browser against a real API on an isolated scratch schema with the sample files (list, tabs, search, paging via URL, detail, drawer, retry flow end to end: failed with a dead SMTP, then Retry with Mailpit up, jobs became sent, button vanished, toast shown; 404 page; mobile 375px). The scratch schema was dropped; the real database still has 11 batches. Mailpit received the 5 retried test emails.
-- **Next (needs the user's go-ahead):** commit Phase 2 (suggested `feat(frontend): Bulk Emails list and detail`), merge it to `main`, then Phase 3 (New Bulk Email wizard) on a new branch from `main`.
-- **Blocked on / waiting for the user:** (1) Phase 1 is committed (`e56d022`); (2) `git push` of `main` (and `feat/dashboard-frontend` if wanted; needs the user's credentials); (3) commit and merge Phase 2.
+- **Last done (2026-11-01):** **Phase 3 built and verified** (uncommitted, on `feat/frontend-new-bulk-email`): the New Bulk Email page in the user's chosen **one-page layout**: upload with client-side checks, immediate server check (`/recipients/parse`), review report (tiles, notice, grouped problems table, unverified rows), prefilled message editor with field buttons, unknown-field warning and live preview, sticky send bar, confirmation dialog, `POST /batches`, redirect to the new batch's page with a toast. New: `src/api/recipients.ts`, `lib/template.ts`, `lib/problems.ts`, `composables/useBulkEmailDraft.ts`, `components/wizard/*`, generic `ConfirmDialog`, `NewBulkEmailView`. Spec in decision 0007. Checked: lint, type-check, 76 unit tests, build; in the browser against a real API on a scratch schema with `9_mixed_everything.xlsx`: real parse (1 valid, 7 skipped incl. a real domain rejection), message preview, confirm, batch queued, redirected, Mailpit received the email ("Update on your order, Eloise Dupont"). Bug caught on the way: Vue renders `inert="false"` as on, so the lock attribute is now omitted when unlocked. Scratch schema dropped; the real database still has 11 batches.
+- **Next (needs the user's go-ahead):** commit Phase 3 and merge to `main`, then Phase 4 (Settings with SMTP test email).
+- **Blocked on / waiting for the user:** (1) commit and merge Phase 3.
 - **Updated:** 2026-10-29
 
 ## Why
@@ -67,13 +67,15 @@ Everything below was built and verified, then removed on 2026-10-29 at the user'
 - [x] Phase 0: scaffold `frontend/` with the stack (kept)
 - [x] Phase 1: app shell, API client, typed API shapes, `StatusBadge`
 - [x] Phase 2: Bulk Emails list and detail (polling, Retry)
-- [ ] Phase 3: New Bulk Email wizard
+- [x] Phase 3: New Bulk Email page (one-page layout)
 - [ ] Phase 4: Settings with SMTP test email
 - [ ] Phase 5: Overview
 - [ ] Phase 6: Verify Emails and Single Email
 - [ ] Phase 7: Failures page (needs the backend Failures endpoint)
 
 ## Open questions
+- **REMIND THE USER:** on 2026-11-01 the user said the New Bulk Email page (and possibly other pages) has **responsive issues and some other problems**, details to be given later. Ask for them at the start of the next session or before Phase 5, and fix on a small branch.
+- Optional improvements discussed for the Review step (not decided): a "Did you mean gmail.com?" hint for typo domains, a checkbox to exclude unverified rows, a warning on the Send bar when unverified rows will be sent.
 - Recipient type per upload (Merchant vs Customer)? Affects filters and the data model; undecided.
 - Add `failed_at` now, or keep using `updated_at`?
 - Where do Templates live (new table) and how are they versioned?

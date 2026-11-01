@@ -7,7 +7,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Feature | Status | Doc | Notes |
 |---|---|---|---|
 | Dashboard: backend APIs | done | [features/dashboard.md](features/dashboard.md) | batch list, paged jobs, retry, stats, settings, STARTTLS, CORS, goose |
-| Dashboard: Vue frontend | in progress (Phases 1-2 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-bulk-emails`; app shell and Bulk Emails done; next Phase 3 wizard |
+| Dashboard: Vue frontend | in progress (Phases 1-3 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-new-bulk-email`; app shell, Bulk Emails and New Bulk Email done; next Phase 4 Settings |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |
@@ -18,9 +18,9 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 
 ## Branches
 
-`feat/dashboard-api` and `feat/db-migrations` (backend APIs, goose migrations, project docs) were merged into local `main` on 2026-10-28 by fast-forward. Local `main` is ahead of `origin/main`; **push pending** (the user pushes from their own terminal).
+`feat/dashboard-api` and `feat/db-migrations` (backend APIs, goose migrations, project docs) were merged into local `main` on 2026-10-28 by fast-forward. `main` has since been pushed to `origin`.
 
-Phases 0-1 of the frontend (`feat/dashboard-frontend`) and the Phase 2 decisions were merged into local `main` on 2026-10-29 by fast-forward; **push of `main` still pending**. Active: `feat/frontend-bulk-emails` (Phase 2, cut from `main`). Rule: one short branch per phase from `main`, see [decisions/0008](decisions/0008-branch-per-phase.md).
+Frontend Phases 0-2 (`feat/dashboard-frontend`, `feat/frontend-bulk-emails`) were merged into local `main` on 2026-10-29 by fast-forward; `main` is pushed to `origin`. Active: `feat/frontend-new-bulk-email` (Phase 3, cut from `main`). Rule: one short branch per phase from `main`, see [decisions/0008](decisions/0008-branch-per-phase.md).
 
 ## Starting a new feature
 

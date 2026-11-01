@@ -74,5 +74,15 @@ Reference: `frontend/design-previews/c-bulk-emails.html`.
 - **Retry button wording:** just the icon plus the word **Retry** (long labels like "Retry failed (12)" were rejected). Its accessible name carries the detail, e.g. `aria-label="Retry 12 failed emails"`. The batch-level Retry first opens a confirmation dialog (centered, 420px): "Retry 12 failed emails? Each one will be sent again to its recipient. Invalid rows are skipped." with Cancel and a black confirm button.
 - **No CSV export.** Row title is the filename ([0009](0009-bulk-email-row-title.md)). Progress updates by polling ([0010](0010-live-progress-polling.md)).
 
+## New Bulk Email page (Phase 3, decided 2026-10-29)
+Reference: `frontend/design-previews/c-new-bulk-email.html` (layout B). The user chose **one page** over a stepped wizard (A) and separate pages (C).
+- Three numbered cards stacked on one page: **1 Upload**, **2 Review**, **3 Write**. Cards 2 and 3 are dimmed and not usable (`inert`) until a file has been checked.
+- A black **sticky bar** at the bottom says "N will be sent · M skipped" and holds the Send button (disabled with the reason shown while something blocks it). Sending asks for confirmation in a centered dialog, then opens the new Bulk Email's page.
+- **Upload:** drop zone with "Choose file"; only `.xlsx` and up to 10 MB are accepted before anything is sent to the server. Choosing a file calls `POST /recipients/parse` at once (nothing is saved or sent). A "Remove" button starts again.
+- **Review:** three tiles (Ready to send in black, Will be skipped in red, Could not verify), a notice ("N rows will be skipped. You can send to the valid ones now, or remove the file and upload a corrected one."), tabs (All problems, Invalid, Duplicate, Bad domain, Unverified) and a problems table (Row, Name, Email, Reason). If no row is valid, an error replaces the notice and Send stays off.
+- **Write:** prefilled subject and message, `{{.Name}}` and `{{.Email}}` insert buttons (at the cursor of the box used last), warning for unknown fields, and a live plain-text preview with arrows through the first five valid recipients.
+- Skipped rows are the API's invalid rows; unverified rows are still sent.
+- Not included: "send me a test email", a downloadable sample file, saving a draft.
+
 ## Still open
 Dark mode (none for the MVP).

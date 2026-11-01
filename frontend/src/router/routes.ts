@@ -33,8 +33,8 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/bulk-emails/new',
     name: 'new-bulk-email',
-    component: Placeholder,
-    meta: { title: 'New Bulk Email', phase: 3 },
+    component: () => import('@/views/NewBulkEmailView.vue'),
+    meta: { title: 'New Bulk Email' },
   },
   {
     path: '/bulk-emails/:id(\\d+)',

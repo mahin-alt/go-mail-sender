@@ -1,0 +1,305 @@
+<!doctype html><html lang="en" data-mode="open"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MailFlow preview: New Bulk Email</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&family=IBM+Plex+Sans:wght@300..700&family=DM+Sans:wght@300..800&family=Plus+Jakarta+Sans:wght@300..800&family=Manrope:wght@300..800&family=Noto+Sans+Bengali:wght@300..800&display=swap">
+<style>
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--font);color:var(--tx);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.app{display:grid;grid-template-columns:var(--sbw) 1fr;min-height:100vh}
+.sb{display:flex;flex-direction:column;gap:2px}
+.sb nav{display:flex;flex-direction:column;gap:2px}
+.sb nav a{display:flex;align-items:center;gap:10px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:600}
+.nm small,.mut{display:block}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:var(--track);border-radius:99px;overflow:hidden;margin-bottom:4px;min-width:90px}
+.bar span{display:block;height:100%;background:var(--ac);border-radius:99px}
+.b{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.b i{font-style:normal;font-weight:700}
+.b-done{color:var(--ok)}.b-run{color:var(--ac)}.b-wait{color:var(--mu)}.b-fail{color:var(--bad)}.b-warn{color:var(--wn)}
+.lg{display:flex;gap:14px;font-size:12px;color:var(--mu)}.lg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+ul.at{list-style:none;padding:0}ul.at li{display:flex;justify-content:space-between;align-items:center;gap:12px}
+ul.at small{display:block}
+.tag{position:fixed;right:14px;bottom:14px;font:600 12px system-ui;background:#111;color:#fff;padding:6px 10px;border-radius:99px;opacity:.85}
+.tag a{text-decoration:underline;margin-left:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+@media(max-width:820px){.app{grid-template-columns:1fr}.sb{flex-direction:row!important;overflow-x:auto}.sb .brand{display:none}.sb nav{flex-direction:row}.sb nav span{display:none}.grid2,.bento{grid-template-columns:1fr!important}.kpis{grid-template-columns:1fr 1fr!important}}
+
+:root{--font:system-ui,-apple-system,"Segoe UI","Noto Sans Bengali",sans-serif;--bg:#EFEEEA;--tx:#161616;--mu:#77756F;--ac:#161616;--ok:#1F9D63;--bad:#E5484D;--wn:#C98A0B;--track:#E4E2DC;--sbw:262px;--pw:234px}
+html[data-mode="rail"]{--sbw:98px;--pw:70px}
+.app{display:block;padding-left:var(--sbw);transition:padding-left .22s ease}
+html[data-mode="rail"] .app:has(.sbi:not([data-hold]):hover),html[data-mode="rail"] .app:has(.sbi :focus-visible){padding-left:262px}
+.sbi{position:fixed;left:14px;top:14px;bottom:14px;width:var(--pw);background:#fff;border-radius:24px;padding:18px 10px;display:flex;flex-direction:column;gap:22px;overflow:hidden;z-index:20;transition:width .22s ease}
+html[data-mode="rail"] .sbi:not([data-hold]):hover,html[data-mode="rail"] .sbi:has(:focus-visible){width:234px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 9px;height:40px;white-space:nowrap;font-size:20px;letter-spacing:-.02em;color:#161616}
+.brand .mk{flex:none}.brand .wm{opacity:1;transition:opacity .15s}.brand b{font-weight:800}.brand .lt{font-weight:300}.brand .it{font-style:italic;font-weight:500;color:#FF6B2C}
+.sbi nav{display:flex;flex-direction:column;gap:6px}
+.sbi nav a{display:flex;align-items:center;gap:14px;height:48px;padding:0 15px;border-radius:16px;color:var(--mu);font-weight:500;font-size:15px;white-space:nowrap}
+.sbi nav a svg{flex:none}.sbi nav a:hover{background:#F1F0EC;color:#161616}.sbi nav a.on{background:#161616;color:#fff}
+.sbi nav a span{opacity:1;transition:opacity .15s}
+html[data-mode="rail"] .sbi:not(:has(:focus-visible)):is([data-hold],:not(:hover)) :is(nav span,.wm,.tog span){opacity:0}
+.tog{margin-top:auto;display:flex;align-items:center;gap:14px;height:48px;width:100%;padding:0 15px;border:0;border-radius:16px;background:#F5F4F0;color:var(--mu);font:500 14px inherit;font-family:inherit;white-space:nowrap;cursor:pointer;overflow:hidden}
+.tog:hover{background:#E9E8E3;color:#161616}.tog svg{flex:none}.tog span{transition:opacity .15s}
+.tog .ex{display:none}html[data-mode="rail"] .tog .ex{display:block}html[data-mode="rail"] .tog .co{display:none}
+main{padding:30px 34px 90px 20px;max-width:1280px;width:100%}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.hd h1{font-size:40px;font-weight:700;letter-spacing:-.02em}.hd p{color:var(--mu);margin-top:4px;font-size:14px}
+.btn{background:#161616;color:#fff;border-radius:99px;padding:13px 22px;font-weight:600;font-size:14px}
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.t{background:#fff;border-radius:24px;padding:24px}
+.t h2{font-size:var(--tt-size,14px);font-weight:var(--tt-w,600);color:var(--tt-c,var(--mu));letter-spacing:var(--tt-ls,0);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.k{background:#fff;border-radius:24px;padding:22px 24px;grid-column:span 3;display:flex;flex-direction:column;justify-content:space-between;min-height:170px}
+.k small{color:var(--mu);font-size:14px;font-weight:500}.k strong{font-size:54px;font-weight:700;letter-spacing:-.03em;line-height:1}.k em{font-style:normal;font-size:13px;color:var(--mu)}
+.k:nth-child(1){background:#161616;color:#fff}.k:nth-child(1) small,.k:nth-child(1) em{color:#BDBBB4}
+.k:nth-child(2) strong{color:var(--bad)}
+.kpis{display:contents}
+.c-chart{grid-column:span 8}.c-attn{grid-column:span 4;background:#FFE9C7}.c-tbl{grid-column:span 12}
+.c-attn h2{color:var(--tt-ca,#7A5A1E)}ul.at li{padding:12px 0;border-top:1px solid rgba(0,0,0,.08)}ul.at li:first-child{border:0;padding-top:0}ul.at b{font-size:14px}ul.at small{font-size:12.5px;color:#7A5A1E;margin-top:2px}ul.at a{background:#161616;color:#fff;border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:600}
+th{font-size:var(--th-size,12px);color:var(--th-c,var(--mu));padding:0 10px 12px;font-weight:var(--th-w,500);text-transform:var(--th-tf,none);letter-spacing:var(--th-ls,0)}td{padding:14px 10px;border-top:1px solid #EFEEEA;font-size:14px}
+td.nm{font-weight:600}.nm small{color:var(--mu);font-weight:400;font-size:12.5px}td small{color:var(--mu);font-size:12px}.mut{color:var(--mu);font-size:13px}
+.bar span{background:#161616}
+.b{padding:5px 12px;border-radius:99px;font-size:12.5px;font-weight:600;background:#F3F2EE}
+.dock{position:fixed;right:14px;bottom:14px;z-index:30;background:#161616;color:#fff;border-radius:18px;padding:10px 12px;font:600 12px system-ui;display:flex;gap:14px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 28px);justify-content:flex-end;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.dock .g{display:flex;gap:4px;align-items:center}.dock .g>span{opacity:.6;margin-right:4px}
+.dock button{font:inherit;color:#fff;background:#2B2B2B;border:0;border-radius:99px;padding:6px 11px;cursor:pointer}
+.dock button[aria-pressed="true"]{background:#fff;color:#161616}
+.dock.min>.g{display:none}.dock.min #dockmin{display:inline-block}
+@media(max-width:820px){.app{padding-left:0}.sbi{position:static;width:auto!important;margin:12px;border-radius:20px;flex-direction:row;align-items:center;padding:10px;overflow-x:auto;box-shadow:none!important}.sbi nav{flex-direction:row}.sbi nav span,.sbi .tog,.brand .wm{display:none}.k,.c-chart,.c-attn,.c-tbl{grid-column:span 12}.hd h1{font-size:30px}main{padding:12px 14px 120px}}
+
+:root{--mu:#66645E;--tt-size:18px;--tt-w:700;--tt-c:#161616;--tt-ca:#4A3410;--tt-ls:-.01em;--th-size:11px;--th-w:600;--th-c:#66645E;--th-tf:uppercase;--th-ls:.06em;--font:'Plus Jakarta Sans','Noto Sans Bengali',system-ui,sans-serif}
+.b-done{color:#12704A}.b-fail{color:#C62E33}.b-warn{color:#8A5A00}.b-run{color:#161616}.b-wait{color:#66645E}
+.view{display:none}.view.on{display:block}
+.crumb{display:inline-flex;align-items:center;gap:6px;color:var(--mu);font-size:13px;font-weight:600;margin-bottom:8px;cursor:pointer;background:none;border:0;font-family:inherit}.crumb:hover{color:#161616}
+.hd h1{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.hd h1 .b{font-size:13px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tabs button{font:600 13px inherit;font-family:inherit;border:0;border-radius:99px;background:#F3F2EE;color:#161616;padding:8px 14px;cursor:pointer}.tabs button span{color:var(--mu);font-weight:500;margin-left:6px}.tabs button.on{background:#161616;color:#fff}.tabs button.on span{color:#d9d7d0}
+.bar2{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.search{border:1.5px solid #E4E2DC;border-radius:99px;padding:9px 16px;font:500 14px inherit;font-family:inherit;min-width:240px;background:#fff}.search:focus{outline:2px solid #161616;outline-offset:2px}
+tr.clk{cursor:pointer}tr.clk:hover td{background:#FAF9F6}
+td.err{color:#C62E33;font-size:13px;max-width:230px}.ib{border:0;background:#F3F2EE;border-radius:99px;width:32px;height:32px;cursor:pointer;font-size:15px}.ib:hover{background:#E4E2DC}
+.pg{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid #EFEEEA;margin-top:4px;font-size:13px;color:var(--mu)}.pg div{display:flex;gap:8px}.pg button{font:600 13px inherit;font-family:inherit;border:0;background:#F3F2EE;border-radius:99px;padding:8px 14px;cursor:pointer}.pg button[disabled]{opacity:.45;cursor:default}
+.prog{grid-column:span 12;display:flex;align-items:center;gap:18px}.prog .bar{flex:1;height:10px;margin:0}.prog b{font-size:14px}
+.btn{border:0;cursor:pointer;font-family:inherit}
+.sec{background:#161616;color:#fff;border-radius:99px;padding:12px 18px;font:600 14px inherit;font-family:inherit;border:0;cursor:pointer}
+.scrim{position:fixed;inset:0;background:rgba(22,22,22,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}.scrim.on{opacity:1;pointer-events:auto}
+.panel{position:fixed;z-index:41;background:#fff;display:flex;flex-direction:column;overflow:auto;transition:transform .25s ease,opacity .2s}
+body[data-pstyle="side"] #panel{right:14px;top:14px;bottom:14px;width:min(440px,calc(100vw - 28px));border-radius:24px;transform:translateX(calc(100% + 28px))}
+body[data-pstyle="side"] #panel.on{transform:none}
+body[data-pstyle="dialog"] #panel{left:50%;top:50%;width:min(560px,calc(100vw - 28px));max-height:calc(100vh - 40px);border-radius:24px;transform:translate(-50%,-46%);opacity:0;pointer-events:none}
+body[data-pstyle="dialog"] #panel.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
+#confirm{left:50%;top:50%;width:min(420px,calc(100vw - 28px));border-radius:24px;transform:translate(-50%,-46%);opacity:0;pointer-events:none}
+#confirm.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
+#panel:not(.on){visibility:hidden;transition:transform .25s ease,opacity .2s,visibility 0s .25s}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;padding:22px 24px 14px;gap:12px}.ph h2{font-size:18px;font-weight:700;letter-spacing:-.01em}.ph small{color:var(--mu);font-size:13px}
+.x{border:0;background:#F3F2EE;border-radius:99px;width:34px;height:34px;cursor:pointer;font-size:16px;flex:none}.x:hover{background:#E4E2DC}
+.pb{padding:0 24px 12px;display:flex;flex-direction:column;gap:16px}
+.fld small{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin-bottom:4px}.fld div{font-size:14px;line-height:1.5}
+.errbox{background:#FFE9C7;color:#4A3410;border-radius:16px;padding:12px 14px;font-size:13.5px;line-height:1.5}
+.bodybox{background:#F5F4F0;border-radius:16px;padding:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pf{margin-top:auto;padding:14px 24px 22px;display:flex;gap:10px;justify-content:flex-end}
+.ghost{border:0;background:#F3F2EE;border-radius:99px;padding:12px 18px;font:600 14px inherit;font-family:inherit;cursor:pointer}
+.sw{position:fixed;left:50%;transform:translateX(-50%);bottom:68px;background:#161616;color:#fff;border-radius:99px;padding:10px 18px;font:600 13px system-ui;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}.sw.on{opacity:1}
+.dock{z-index:30}
+
+:root{--mu:#66645E;--tt-size:18px;--tt-w:700;--tt-c:#161616;--tt-ca:#4A3410;--tt-ls:-.01em;--th-size:11px;--th-w:600;--th-c:#66645E;--th-tf:uppercase;--th-ls:.06em;--font:'Plus Jakarta Sans','Noto Sans Bengali',system-ui,sans-serif}
+.b-done{color:#12704A}.b-fail{color:#C62E33}.b-warn{color:#8A5A00}.b-run{color:#161616}.b-wait{color:#66645E}
+button{font-family:inherit}
+.view{display:none}.view.on{display:block}
+.hd h1{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.hd h1 .b{font-size:13px}
+.btn{border:0;cursor:pointer}.btn[disabled],.sec[disabled]{opacity:.4;cursor:default}
+.sec{background:#161616;color:#fff;border-radius:99px;padding:12px 20px;font:600 14px inherit;font-family:inherit;border:0;cursor:pointer}
+.ghost{border:0;background:#F3F2EE;border-radius:99px;padding:12px 20px;font:600 14px inherit;font-family:inherit;cursor:pointer}.ghost:hover{background:#E4E2DC}
+.crumb{display:inline-flex;gap:6px;color:var(--mu);font-size:13px;font-weight:600;margin-bottom:8px;cursor:pointer;background:none;border:0}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tabs button{font:600 13px inherit;font-family:inherit;border:0;border-radius:99px;background:#F3F2EE;color:#161616;padding:8px 14px;cursor:pointer}.tabs button span{color:var(--mu);font-weight:500;margin-left:6px}.tabs button.on{background:#161616;color:#fff}.tabs button.on span{color:#d9d7d0}
+tr.clk{cursor:pointer}tr.clk:hover td{background:#FAF9F6}
+td.err{color:#C62E33;font-size:13px}
+/* wizard */
+.steps{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:10px;background:#fff;border-radius:99px;padding:8px 16px 8px 8px;font-weight:600;font-size:13.5px;color:var(--mu)}
+.step i{font-style:normal;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#F3F2EE;font-size:12px;color:#161616}
+.step.on{color:#161616}.step.on i{background:#161616;color:#fff}.step.done i{background:#12704A;color:#fff}
+.card{background:#fff;border-radius:24px;padding:26px}
+.card h2{font-size:18px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}.card .sub{color:var(--mu);font-size:14px;margin-bottom:18px}
+.drop{border:2px dashed #D6D4CC;border-radius:20px;padding:42px 20px;text-align:center;background:#FAF9F6}
+.drop b{display:block;font-size:16px;margin-bottom:6px}.drop p{color:var(--mu);font-size:13.5px;margin-bottom:16px}
+.drop .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.file{display:flex;align-items:center;gap:14px;background:#F5F4F0;border-radius:18px;padding:14px 18px}.file .ic{width:42px;height:42px;border-radius:12px;background:#161616;color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px}
+.file small{color:var(--mu);display:block;font-size:12.5px}.file .x{margin-left:auto;border:0;background:#E9E8E3;border-radius:99px;padding:8px 14px;font-weight:600;font-size:13px;cursor:pointer}
+.spin{display:inline-block;width:16px;height:16px;border:2.5px solid #D6D4CC;border-top-color:#161616;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:8px}@keyframes sp{to{transform:rotate(360deg)}}
+.notice{border-radius:16px;padding:14px 16px;font-size:14px;line-height:1.55;margin:14px 0}.notice.warn{background:#FFE9C7;color:#4A3410}.notice.ok{background:#E4F5EC;color:#0E4F35}.notice.err{background:#FDE9EA;color:#7A1D21}
+.tiles3{display:grid;grid-column:span 12;grid-template-columns:repeat(3,1fr);gap:12px}.tiles3 .k{grid-column:auto;min-height:128px;padding:18px 20px}.tiles3 .k strong{font-size:40px}
+.fld{margin-bottom:16px}.fld label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin-bottom:6px}
+.inp,.ta{width:100%;border:1.5px solid #E4E2DC;border-radius:16px;padding:12px 16px;font:500 15px inherit;font-family:inherit;background:#fff;line-height:1.6}.ta{min-height:210px;resize:vertical}.inp:focus,.ta:focus{outline:2px solid #161616;outline-offset:2px}
+.chips{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:13px;color:var(--mu)}.chip{border:0;background:#F3F2EE;border-radius:99px;padding:6px 12px;font:600 13px ui-monospace,Menlo,monospace;cursor:pointer;color:#161616}.chip:hover{background:#E4E2DC}
+.two{display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
+.mail{background:#F5F4F0;border-radius:20px;padding:18px}.mail .top{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--mu);margin-bottom:10px;gap:10px}
+.mail .top div{display:flex;gap:6px}.mail .top button{border:0;background:#E4E2DC;border-radius:99px;width:28px;height:28px;cursor:pointer}
+.mail .to{font-size:13px;color:var(--mu);margin-bottom:4px}.mail .subj{font-weight:700;font-size:16px;margin-bottom:12px;line-height:1.5}.mail .msg{white-space:pre-wrap;font-size:14.5px;line-height:1.7}
+.sum{display:grid;grid-template-columns:150px 1fr;gap:10px 16px;font-size:14.5px;margin-bottom:6px}.sum dt{color:var(--mu)}.sum dd{font-weight:600}
+.foot{display:flex;justify-content:space-between;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #EFEEEA}
+.sticky{position:sticky;bottom:12px;background:#161616;color:#fff;border-radius:99px;padding:12px 14px 12px 24px;display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:14px;z-index:10;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+.sticky .sec{background:#fff;color:#161616}
+.locked{opacity:.5;pointer-events:none}.secnum{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#161616;color:#fff;font-size:13px;margin-right:10px;vertical-align:2px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.addr{background:#fff;border-radius:99px;padding:8px 8px 8px 18px;display:flex;align-items:center;gap:12px;font:500 13px ui-monospace,Menlo,monospace;color:var(--mu);margin-bottom:14px}.addr b{color:#161616}.addr button{margin-left:auto;border:0;background:#F3F2EE;border-radius:99px;padding:6px 12px;font:600 12px system-ui;cursor:pointer}
+.prog{grid-column:span 12;display:flex;align-items:center;gap:18px}.prog .bar{flex:1;height:10px;margin:0}
+.scrim{position:fixed;inset:0;background:rgba(22,22,22,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}.scrim.on{opacity:1;pointer-events:auto}
+.dlg{position:fixed;left:50%;top:50%;transform:translate(-50%,-46%);width:min(440px,calc(100vw - 28px));background:#fff;border-radius:24px;padding:26px;z-index:41;opacity:0;pointer-events:none;transition:.2s}.dlg.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%)}
+.dlg h3{font-size:18px;margin-bottom:6px}.dlg p{color:var(--mu);font-size:14px;line-height:1.55}.dlg .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.toast{position:fixed;right:18px;top:18px;background:#fff;border-radius:18px;padding:14px 18px;box-shadow:0 10px 30px rgba(0,0,0,.18);z-index:60;font-size:14px;max-width:340px;opacity:0;transform:translateY(-8px);transition:.25s;pointer-events:none}.toast.on{opacity:1;transform:none}.toast b{display:block;color:#12704A}
+.dock{z-index:30}
+.dock{top:14px;bottom:auto}
+.toast{top:auto;bottom:84px;right:auto;left:50%;transform:translate(-50%,8px)}.toast.on{transform:translate(-50%,0)}
+@media(max-width:820px){.two,.tiles3{grid-template-columns:1fr}.sum{grid-template-columns:1fr}}
+</style></head><body>
+<div class="app"><aside class="sbi"><div class="brand"><svg class="mk" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" ><g stroke="#FF6B2C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M28 4 4 13l9 4 4 9z"/><path d="M28 4 13 17"/></g></svg><span class="wm"><b>Mail</b><span class="lt">Flow</span></span></div><nav id="nav"></nav><button class="tog" id="tog" aria-expanded="true"><svg class="co" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg><svg class="ex" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg><span id="togl">Collapse sidebar</span></button></aside>
+<main id="main"></main></div>
+<div class="scrim" id="scrim"></div>
+<div class="dlg" id="dlg" role="alertdialog"><h3 id="dt"></h3><p id="dp"></p><div class="acts"><button class="ghost" id="dc">Cancel</button><button class="sec" id="dok"></button></div></div>
+<div class="toast" id="toast"></div>
+<div class="dock"><div class="g"><span>Wizard layout</span><button data-l="A" aria-pressed="true">A · Steps</button><button data-l="B" aria-pressed="false">B · One page</button><button data-l="C" aria-pressed="false">C · Separate pages</button></div><div class="g"><span>Demo</span><button id="reset">Start over</button></div></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const PROBLEMS=[
+ {row:3,name:'Ben Carter',email:'',reason:'email is empty',type:'invalid'},
+ {row:9,name:'Mehedi Hasan',email:'mehedi@@bad.example',reason:'invalid email address',type:'invalid'},
+ {row:14,name:'Joy Das',email:'joy.das(at)shop.example',reason:'invalid email address',type:'invalid'},
+ {row:21,name:'Tania Islam',email:'tania@',reason:'invalid email address',type:'invalid'},
+ {row:27,name:'Rafi Khan',email:'',reason:'email is empty',type:'invalid'},
+ {row:33,name:'Sumi Akter',email:'sumi akter@shop.example',reason:'invalid email address',type:'invalid'},
+ {row:48,name:'Nabil Haque',email:'nabil@@mart.example',reason:'invalid email address',type:'invalid'},
+ {row:52,name:'',email:'',reason:'email is empty',type:'invalid'},
+ {row:61,name:'Orin Sheikh',email:'orin@shop',reason:'invalid email address',type:'invalid'},
+ {row:77,name:'Aisha Rahman',email:'aisha@fastmart.example',reason:'duplicate of row 5',type:'duplicate'},
+ {row:130,name:'Imran Hossain',email:'imran@greenleaf.example',reason:'duplicate of row 12',type:'duplicate'},
+ {row:144,name:'Kabir Ali',email:'kabir@no-such-domain-xyz.example',reason:'domain does not exist',type:'domain'},
+ {row:201,name:'Dola Roy',email:'dola@typo-gmial.example',reason:'domain does not exist',type:'domain'},
+ {row:233,name:'Salma Begum',email:'salma@',reason:'invalid email address',type:'invalid'},
+ {row:260,name:'Hasan Mahmud',email:'',reason:'email is empty',type:'invalid'},
+ {row:289,name:'Poly Sarker',email:'poly@@shop.example',reason:'invalid email address',type:'invalid'}];
+const UNVERIFIED=[{row:88,name:'Lina Paul',email:'lina@slowdns.example',reason:'DNS lookup timed out'},{row:150,name:'Sohel Rana',email:'sohel@slowdns.example',reason:'DNS lookup timed out'},{row:212,name:'Mim Akter',email:'mim@slowdns.example',reason:'DNS lookup timed out'}];
+const SAMPLES=[{name:'Aisha Rahman',email:'aisha@fastmart.example'},{name:'রহিম উদ্দিন',email:'rahim@shopbd.example'},{name:'Nadia Rahman',email:'nadia@greenleaf.example'},{name:'Tanvir Ahmed',email:'tanvir@kitchenhub.example'}];
+const TOTAL=312,VALID=296,SKIPPED=16;
+const SUBJ0='Update on your order, {{.Name}}';
+const BODY0='Hello {{.Name}},\n\nWe wanted to let you know that your order is on its way and should arrive within 2 to 3 working days.\n\nIf you have any questions, just reply to this email.\n\nThank you,\nMailFlow Support';
+let S={layout:'A',step:0,file:null,phase:'empty',err:'',tab:'all',subject:SUBJ0,body:BODY0,pi:0,view:'new',sent:false,done:false,p:{sent:0,failed:0}};
+const NAVS=[['Dashboard','dashboard','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>'],['Bulk Emails','list','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>'],['Single Email','','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>'],['Verify Emails','','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'],['Failures','','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'],['Settings','','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>']];
+const BADGE=(t,c,g)=>`<span class="b b-${c}"><i>${g}</i>${t}</span>`;
+const B={done:BADGE('Completed','done','✓'),run:BADGE('Processing','run','↻'),wait:BADGE('Pending','wait','○'),warn:BADGE('Completed with failures','warn','!'),sent:BADGE('Sent','done','✓'),fail:BADGE('Failed','fail','✕'),inv:BADGE('Skipped (invalid)','warn','!')};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fill(t,r){return t.replace(/\{\{\s*\.Name\s*\}\}/g,r.name).replace(/\{\{\s*\.Email\s*\}\}/g,r.email)}
+function unknownFields(t){const m=[...t.matchAll(/\{\{\s*\.(\w+)\s*\}\}/g)].map(x=>x[1]).filter(n=>n!=='Name'&&n!=='Email');return [...new Set(m)]}
+function toast(h,t){const e=$('#toast');e.innerHTML='<b>'+h+'</b>'+t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),3200)}
+/* sidebar */
+let mode='open';const sb=$('.sbi');
+function setMode(m){mode=m;document.documentElement.dataset.mode=m;$('#tog').setAttribute('aria-expanded',m==='open');$('#togl').textContent=m==='open'?'Collapse sidebar':'Keep sidebar open'}
+$('#tog').onclick=()=>{if(mode==='open'){setMode('rail');sb.setAttribute('data-hold','')}else{setMode('open');sb.removeAttribute('data-hold')}};
+sb.addEventListener('mouseleave',()=>sb.removeAttribute('data-hold'));
+function nav(){const act={dashboard:'Dashboard',list:'Bulk Emails',new:'Bulk Emails',detail:'Bulk Emails'}[S.view];$('#nav').innerHTML=NAVS.map(([n,v,i])=>`<a href="#" data-v="${v}" class="${n===act?'on':''}" aria-label="${n}">${i}<span>${n}</span></a>`).join('');$$('#nav a').forEach(a=>a.onclick=e=>{e.preventDefault();if(a.dataset.v)go(a.dataset.v)})}
+/* dialogs */
+function ask(title,text,okLabel,onOk){$('#dt').textContent=title;$('#dp').textContent=text;$('#dok').textContent=okLabel;$('#dlg').classList.add('on');$('#scrim').classList.add('on');$('#dok').onclick=()=>{close();onOk()};$('#dc').onclick=close}
+function close(){$('#dlg').classList.remove('on');$('#scrim').classList.remove('on')}
+$('#scrim').onclick=close;addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+/* wizard sections */
+const STEPS=['Upload','Review','Write','Send'];
+function stepbar(){return `<div class="steps">${STEPS.map((n,i)=>`<div class="step ${i===S.step?'on':''} ${i<S.step?'done':''}"><i>${i<S.step?'✓':i+1}</i>${n}</div>`).join('')}</div>`}
+function secUpload(){
+ let body='';
+ if(S.phase==='empty')body=`<div class="drop"><b>Drop your .xlsx file here</b><p>First sheet, with a header row that has Name and Email. Up to 10 MB.</p><div class="row"><button class="sec" id="pick">Choose file</button><button class="ghost" id="sample">Use the demo file</button></div></div><input type="file" id="fi" accept=".xlsx" hidden>`;
+ else{body=`<div class="file"><div class="ic">XLSX</div><div><b>${esc(S.file.name)}</b><small>${S.file.size}</small></div>${S.phase==='checking'?'':'<button class="x" id="rm">Remove</button>'}</div>`;
+  if(S.phase==='checking')body+=`<div class="notice" style="background:#F5F4F0"><span class="spin"></span>Checking every row. Nothing is sent yet.</div>`;
+  else body+=`<div class="notice ok"><b>${TOTAL} rows checked.</b> ${VALID} are ready to send, ${SKIPPED} will be skipped. See the next step.</div>`}
+ if(S.err)body=`<div class="notice err">${esc(S.err)}</div>`+body;
+ return `<h2>${S.layout==='B'?'<span class="secnum">1</span>':''}Upload your spreadsheet</h2><p class="sub">We check the file first. Nothing is sent until you confirm at the end.</p>${body}`}
+function secReview(){
+ if(S.phase!=='ready')return `<h2><span class="secnum">2</span>Review the file</h2><p class="sub">Upload a file first to see how many rows are valid.</p>`;
+ const rows=(S.tab==='unv'?UNVERIFIED.map(r=>({...r,type:'unv'})):S.tab==='all'?PROBLEMS:PROBLEMS.filter(r=>r.type===S.tab));
+ const cnt=t=>PROBLEMS.filter(r=>r.type===t).length;
+ return `<h2>${S.layout==='B'?'<span class="secnum">2</span>':''}Review the file</h2><p class="sub">What will happen when you send. Fix the file and upload it again if something looks wrong.</p>
+ <div class="bento"><div class="kpis tiles3" style="display:grid">
+  <div class="k" style="background:#161616;color:#fff"><small style="color:#d9d7d0">Ready to send</small><strong>${VALID}</strong><em style="color:#d9d7d0">valid emails</em></div>
+  <div class="k" style="background:#F5F4F0"><small>Will be skipped</small><strong style="color:var(--bad)">${SKIPPED}</strong><em>invalid, duplicate or bad domain</em></div>
+  <div class="k" style="background:#F5F4F0"><small>Could not verify</small><strong>${UNVERIFIED.length}</strong><em>still sent (DNS timed out)</em></div></div></div>
+ <div class="notice warn"><b>${SKIPPED} rows will be skipped.</b> You can send to the ${VALID} valid emails now, or go back and upload a corrected file.</div>
+ <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div class="tabs" id="rtabs">${[['all','All problems',SKIPPED],['invalid','Invalid email',cnt('invalid')],['duplicate','Duplicate',cnt('duplicate')],['domain','Bad domain',cnt('domain')],['unv','Unverified',UNVERIFIED.length]].map(([v,l,c])=>`<button data-t="${v}" class="${S.tab===v?'on':''}">${l}<span>${c}</span></button>`).join('')}</div></div>
+ <div style="overflow-x:auto;max-height:340px;overflow-y:auto"><table><thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Reason</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="num" style="text-align:left">${r.row}</td><td class="nm" style="font-weight:600">${esc(r.name||'(empty)')}</td><td>${esc(r.email||'(empty)')}</td><td class="err" style="color:${r.type==='unv'?'#8A5A00':'#C62E33'}">${r.reason}</td></tr>`).join('')}</tbody></table></div>`}
+function secWrite(){
+ const un=unknownFields(S.subject+S.body);
+ return `<h2>${S.layout==='B'?'<span class="secnum">3</span>':''}Write your message</h2><p class="sub">Prefilled with a starting message. Edit it, then check the preview on the right.</p>
+ <div class="two"><div>
+  <div class="chips">Insert a field: <button class="chip" data-ins="{{.Name}}">{{.Name}}</button><button class="chip" data-ins="{{.Email}}">{{.Email}}</button></div>
+  <div class="fld"><label for="subj">Subject</label><input class="inp" id="subj" value="${esc(S.subject)}"></div>
+  <div class="fld"><label for="body">Message</label><textarea class="ta" id="body">${esc(S.body)}</textarea></div>
+  <div id="warnbox">${un.length?`<div class="notice err">Unknown field ${un.map(u=>'<b>{{.'+u+'}}</b>').join(', ')}. Only {{.Name}} and {{.Email}} work.</div>`:''}</div></div>
+ <div><div class="mail"><div class="top"><span>Preview for recipient ${S.pi+1} of ${SAMPLES.length}</span><div><button id="pp" aria-label="Previous recipient">‹</button><button id="pn" aria-label="Next recipient">›</button></div></div><div class="to" id="pto"></div><div class="subj" id="psub"></div><div class="msg" id="pmsg"></div></div></div></div>`}
+function secSend(){
+ return `<h2>${S.layout==='B'?'<span class="secnum">4</span>':''}Ready to send?</h2><p class="sub">Check the summary. Sending starts when you confirm.</p>
+ <dl class="sum"><dt>File</dt><dd>${S.file?esc(S.file.name):'-'}</dd><dt>Will be sent to</dt><dd>${VALID} recipients</dd><dt>Skipped</dt><dd>${SKIPPED} rows (shown in the report)</dd><dt>Subject</dt><dd>${esc(fill(S.subject,SAMPLES[0]))} <span style="color:var(--mu);font-weight:500">(example)</span></dd></dl>
+ <div class="notice" style="background:#F5F4F0">Emails are sent in the background, a few at a time. You can leave this page; the progress is on the Bulk Email page.</div>`}
+function updPreview(){const r=SAMPLES[S.pi];const t=$('#pto');if(!t)return;t.textContent='To: '+r.name+' <'+r.email+'>';$('#psub').textContent=fill(S.subject,r);$('#pmsg').textContent=fill(S.body,r)}
+function bindWrite(){
+ const s=$('#subj'),b=$('#body');if(!s)return;let last=b;s.onfocus=()=>last=s;b.onfocus=()=>last=b;
+ const refresh=()=>{S.subject=s.value;S.body=b.value;updPreview();const un=unknownFields(S.subject+S.body);$('#warnbox').innerHTML=un.length?`<div class="notice err">Unknown field ${un.map(u=>'<b>{{.'+u+'}}</b>').join(', ')}. Only {{.Name}} and {{.Email}} work.</div>`:'';const bt=$('#sendbtn');if(bt)bt.disabled=!(S.subject.trim()&&S.body.trim())};
+ s.oninput=b.oninput=refresh;
+ $$('[data-ins]').forEach(c=>c.onclick=()=>{const el=last;const a=el.selectionStart??el.value.length;el.value=el.value.slice(0,a)+c.dataset.ins+el.value.slice(el.selectionEnd??a);el.focus();el.selectionStart=el.selectionEnd=a+c.dataset.ins.length;refresh()});
+ $('#pp').onclick=()=>{S.pi=(S.pi+SAMPLES.length-1)%SAMPLES.length;render()};$('#pn').onclick=()=>{S.pi=(S.pi+1)%SAMPLES.length;render()};updPreview()}
+function bindUpload(){
+ const pick=$('#pick');if(pick){const fi=$('#fi');pick.onclick=()=>fi.click();fi.onchange=()=>{const f=fi.files[0];if(f)takeFile(f.name,(f.size/1024).toFixed(0)+' KB',f.size)};$('#sample').onclick=()=>takeFile('orders_oct28.xlsx','48 KB',48000)}
+ const rm=$('#rm');if(rm)rm.onclick=()=>{S.phase='empty';S.file=null;S.err='';S.step=0;render()}}
+function takeFile(name,size,bytes){S.err='';if(!/\.xlsx$/i.test(name)){S.err='only .xlsx files are supported';render();return}if(bytes>10*1048576){S.err='file is too large (limit 10 MB)';render();return}
+ S.file={name,size};S.phase='checking';render();setTimeout(()=>{S.phase='ready';render()},1300)}
+function bindReview(){$$('#rtabs button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;render()})}
+function sendNow(){ask('Send to '+VALID+' recipients?','Each valid row will get the email. '+SKIPPED+' invalid rows are skipped. This cannot be undone.','Send '+VALID+' emails',()=>{S.sent=true;S.view='detail';S.done=false;S.p={sent:0,failed:0};render();run()})}
+function run(){clearInterval(run.t);run.t=setInterval(()=>{const left=VALID-S.p.sent-S.p.failed;if(left<=0){clearInterval(run.t);S.done=true;render();toast('Sending finished','289 sent, 7 failed. Review the report below.');return}const n=Math.min(left,19);const f=(S.p.failed<7&&Math.random()<.4)?1:0;S.p.failed=Math.min(7,S.p.failed+f);S.p.sent=Math.min(289,S.p.sent+n-f);if(S.p.sent+S.p.failed>=VALID-1){S.p.sent=289-0;S.p.failed=7}render()},180)}
+function wizard(){
+ const L=S.layout,ready=S.phase==='ready',canSend=ready&&S.subject.trim()&&S.body.trim();
+ let h='';
+ if(L==='C')h+=`<div class="addr">localhost:5173<b>/bulk-emails/new/${['upload','review','write','send'][S.step]}</b><button id="refresh">Simulate refresh</button></div>`;
+ if(L==='B'){
+  h+=`<div class="stack"><section class="card">${secUpload()}</section><section class="card ${ready?'':'locked'}">${secReview()}</section><section class="card ${ready?'':'locked'}">${secWrite()}</section></div>
+  <div class="sticky"><span>${ready?`<b>${VALID}</b> will be sent · <b>${SKIPPED}</b> skipped`:'Upload a file to begin'}</span><button class="sec" id="sendbtn" ${canSend?'':'disabled'}>Send to ${VALID} recipients</button></div>`}
+ else{
+  const sec=[secUpload,secReview,secWrite,secSend][S.step]();
+  const back=S.step>0?`<button class="ghost" id="back">Back</button>`:'<span></span>';
+  const next=S.step<3?`<button class="sec" id="next" ${(S.step===0&&!ready)||(S.step===2&&!(S.subject.trim()&&S.body.trim()))?'disabled':''}>Continue</button>`:`<button class="sec" id="sendbtn">Send to ${VALID} recipients</button>`;
+  h+=stepbar()+`<section class="card">${sec}<div class="foot">${back}${next}</div></section>`}
+ return h}
+function bindWizard(){bindUpload();bindReview();bindWrite();
+ const n=$('#next');if(n)n.onclick=()=>{S.step++;render()};const bk=$('#back');if(bk)bk.onclick=()=>{S.step--;render()};
+ const sn=$('#sendbtn');if(sn)sn.onclick=sendNow;
+ const rf=$('#refresh');if(rf)rf.onclick=()=>{S.step=0;S.phase='empty';S.file=null;S.err='your file is not kept after a refresh. Please choose it again.';render()}}
+/* other views */
+function detail(){
+ const done=S.done,sent=S.p.sent,failed=S.p.failed,proc=sent+failed,st=done?B.warn:B.run,pct=Math.round(sent/TOTAL*100);
+ const rows=[['Nadia Rahman','nadia@greenleaf.example','fail','Mailbox full (552 5.2.2)'],['রহিম উদ্দিন','rahim@shopbd.example','fail','Connection timed out'],['Tanvir Ahmed','tanvir@kitchenhub.example','sent',''],['Aisha Rahman','aisha@fastmart.example','sent',''],['Mehedi Hasan','mehedi@@bad.example','inv','Row 9: invalid email address']];
+ return `<button class="crumb" data-go="list">← Bulk Emails</button><div class="hd"><div><h1>${esc(S.file?S.file.name:'orders_oct28.xlsx')} ${st}</h1><p>Batch #45 · created just now · ${TOTAL} emails</p></div>${done?`<button class="btn" id="retry" aria-label="Retry 7 failed emails">↻ Retry</button>`:''}</div>
+ <div class="bento"><div class="kpis"><div class="k" style="background:#161616;color:#fff"><small style="color:#d9d7d0">Sent</small><strong>${sent}</strong><em style="color:#d9d7d0">${pct}% of ${TOTAL}</em></div><div class="k"><small>Failed</small><strong style="color:var(--bad)">${failed}</strong><em>${failed?'can be retried':'none'}</em></div><div class="k"><small>Pending</small><strong>${done?0:Math.max(0,VALID-proc)}</strong><em>${done?'none waiting':'sending now'}</em></div><div class="k"><small>Invalid</small><strong>${SKIPPED}</strong><em>skipped rows</em></div></div>
+ <section class="t prog"><h2 style="margin:0">Progress</h2><div class="bar"><span style="width:${pct}%;transition:width .2s"></span></div><b>${sent} / ${TOTAL}</b></section>
+ ${done?`<section class="t" style="grid-column:span 12"><h2>Final report</h2><dl class="sum"><dt>Result</dt><dd>289 of 312 emails sent (93%)</dd><dt>Failed</dt><dd>7 (mailbox full 4, timed out 3). They can be retried.</dd><dt>Skipped</dt><dd>16 rows: 12 invalid email, 2 duplicate, 2 bad domain</dd></dl><button class="ghost" data-go="dashboard">Go to the Dashboard</button></section>`:`<section class="t" style="grid-column:span 12"><span class="spin"></span>Sending in the background. This page updates by itself.</section>`}
+ <section class="t c-tbl"><h2>Emails</h2><table><thead><tr><th>Recipient</th><th>Status</th><th>Last error</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="nm">${esc(r[0])}<small>${esc(r[1])}</small></td><td>${B[r[2]]}</td><td class="err">${r[3]}</td></tr>`).join('')}</tbody></table></section></div>`}
+function listView(){
+ const mine=S.sent?`<tr class="clk" data-go="detail"><td class="nm">${esc(S.file?S.file.name:'orders_oct28.xlsx')}<small>#45</small></td><td>${S.done?B.warn:B.run}</td><td><div class="bar"><span style="width:${Math.round(S.p.sent/TOTAL*100)}%"></span></div><small>${S.p.sent} / ${TOTAL}</small></td><td class="num">${S.p.failed}</td><td class="num">${SKIPPED}</td><td class="mut">just now</td></tr>`:'';
+ const old=[['refunds_oct27.xlsx',44,B.warn,300,312,12,0,'1 h ago'],['payouts_nov.xlsx',43,B.done,610,610,0,3,'3 h ago'],['slots_oct.xlsx',42,B.done,148,148,0,0,'Yesterday']].map(r=>`<tr class="clk"><td class="nm">${r[0]}<small>#${r[1]}</small></td><td>${r[2]}</td><td><div class="bar"><span style="width:${Math.round(r[3]/r[4]*100)}%"></span></div><small>${r[3]} / ${r[4]}</small></td><td class="num">${r[5]}</td><td class="num">${r[6]}</td><td class="mut">${r[7]}</td></tr>`).join('');
+ return `<div class="hd"><div><h1>Bulk Emails</h1><p>Every file you have uploaded</p></div><button class="btn" data-go="new">+ New Bulk Email</button></div><section class="t"><table><thead><tr><th>Filename</th><th>Status</th><th>Progress</th><th class="num">Failed</th><th class="num">Invalid</th><th>Created</th></tr></thead><tbody>${mine}${old}</tbody></table></section>`}
+function dash(){
+ const s=S.sent&&S.done,sentToday=1243+(S.sent?S.p.sent:0),failed=79+(S.sent?S.p.failed:0);
+ const attn=[...(s?[['orders_oct28.xlsx','7 failed · mailbox full, timed out']]:[]),['refunds_oct27.xlsx','12 failed · mailbox full'],['returns_oct26.xlsx','All 64 failed · SMTP auth rejected']];
+ return `<div class="hd"><div><h1>Dashboard</h1><p>Sunday, 1 November</p></div><button class="btn" data-go="new">+ New Bulk Email</button></div>
+ <div class="bento"><div class="kpis"><div class="k" style="background:#161616;color:#fff"><small style="color:#d9d7d0">Sent today</small><strong>${sentToday.toLocaleString()}</strong><em style="color:#d9d7d0">${S.sent?'includes orders_oct28.xlsx':'↑ 12% vs yesterday'}</em></div><div class="k"><small>Failed</small><strong style="color:var(--bad)">${failed}</strong><em>needs attention</em></div><div class="k"><small>Queued</small><strong>86</strong><em>waiting for workers</em></div><div class="k"><small>In progress</small><strong>${S.sent&&!S.done?1:0}</strong><em>${S.sent&&!S.done?'orders_oct28.xlsx':'nothing sending'}</em></div></div>
+ <section class="t c-attn"><h2>Needs attention</h2><ul class="at">${attn.map(a=>`<li><div><b>${a[0]}</b><small>${a[1]}</small></div><a href="#" data-go="${a[0]==='orders_oct28.xlsx'?'detail':'list'}">Review</a></li>`).join('')}</ul></section>
+ <section class="t c-tbl"><h2>Recent Bulk Emails <a href="#" data-go="list" style="color:var(--mu);font-size:13px">View all</a></h2><table><thead><tr><th>Filename</th><th>Status</th><th>Progress</th><th class="num">Failed</th><th>When</th></tr></thead><tbody>${S.sent?`<tr class="clk" data-go="detail"><td class="nm">${esc(S.file?S.file.name:'orders_oct28.xlsx')}</td><td>${S.done?B.warn:B.run}</td><td><div class="bar"><span style="width:${Math.round(S.p.sent/TOTAL*100)}%"></span></div><small>${S.p.sent} / ${TOTAL}</small></td><td class="num">${S.p.failed}</td><td class="mut">just now</td></tr>`:''}<tr class="clk"><td class="nm">refunds_oct27.xlsx</td><td>${B.warn}</td><td><div class="bar"><span style="width:96%"></span></div><small>300 / 312</small></td><td class="num">12</td><td class="mut">1 h ago</td></tr><tr class="clk"><td class="nm">payouts_nov.xlsx</td><td>${B.done}</td><td><div class="bar"><span style="width:100%"></span></div><small>610 / 610</small></td><td class="num">0</td><td class="mut">3 h ago</td></tr></tbody></table></section></div>`}
+/* router */
+function go(v){S.view=v;if(v==='new'&&S.sent){reset(true)}render();scrollTo(0,0)}
+function render(){
+ nav();const m=$('#main');
+ if(S.view==='new')m.innerHTML=`<div class="hd"><div><h1>New Bulk Email</h1><p>Upload, review, write, send. Nothing is sent until the last step.</p></div></div>`+wizard();
+ else if(S.view==='detail')m.innerHTML=detail();else if(S.view==='list')m.innerHTML=listView();else m.innerHTML=dash();
+ $$('[data-go]').forEach(e=>e.onclick=ev=>{ev.preventDefault();go(e.dataset.go)});
+ if(S.view==='new')bindWizard();
+ const rt=$('#retry');if(rt)rt.onclick=()=>ask('Retry 7 failed emails?','Each one will be sent again to its recipient. Invalid rows are skipped.','Retry 7 emails',()=>toast('7 emails requeued','They will be sent again shortly.'));
+ $$('[data-l]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===S.layout))}
+function reset(keepLayout){clearInterval(run.t);const l=S.layout;S={layout:l,step:0,file:null,phase:'empty',err:'',tab:'all',subject:SUBJ0,body:BODY0,pi:0,view:'new',sent:false,done:false,p:{sent:0,failed:0}}}
+$$('[data-l]').forEach(b=>b.onclick=()=>{S.layout=b.dataset.l;if(S.view!=='new')S.view='new';render()});
+$('#reset').onclick=()=>{reset();render()};
+setMode('open');render();
+</script></body></html>

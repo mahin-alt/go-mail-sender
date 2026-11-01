@@ -8,15 +8,17 @@ withDefaults(
     caption?: string
     /** `ink` is the black tile, `danger` colours the number red, `plain` is a white tile. */
     tone?: 'plain' | 'ink' | 'danger'
+    /** Use the soft grey surface, for tiles that sit inside a white card. */
+    soft?: boolean
   }>(),
-  { caption: '', tone: 'plain' },
+  { caption: '', tone: 'plain', soft: false },
 )
 </script>
 
 <template>
   <div
     class="rounded-tile flex min-h-36 flex-col justify-between p-6"
-    :class="tone === 'ink' ? 'bg-ink text-white' : 'bg-tile'"
+    :class="tone === 'ink' ? 'bg-ink text-white' : soft ? 'bg-note' : 'bg-tile'"
   >
     <span class="text-sm font-medium" :class="tone === 'ink' ? 'text-white/75' : 'text-muted'">{{
       label
