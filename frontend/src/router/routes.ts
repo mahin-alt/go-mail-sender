@@ -63,8 +63,8 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/settings',
     name: 'settings',
-    component: Placeholder,
-    meta: { title: 'Settings', icon: Settings, phase: 4 },
+    component: () => import('@/views/SettingsView.vue'),
+    meta: { title: 'Settings', icon: Settings },
   },
   {
     path: '/:pathMatch(.*)*',

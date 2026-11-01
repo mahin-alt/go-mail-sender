@@ -1,5 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { VueQueryPlugin } from '@tanstack/vue-query'
+import PrimeVue from 'primevue/config'
+import ToastService from 'primevue/toastservice'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
@@ -14,7 +16,7 @@ async function mountAt(path: string) {
   router.push(path)
   await router.isReady()
   const wrapper = mount(App, {
-    global: { plugins: [router, [VueQueryPlugin, { queryClient }]] },
+    global: { plugins: [router, [VueQueryPlugin, { queryClient }], PrimeVue, ToastService] },
   })
   await flushPromises()
   return { wrapper, router }

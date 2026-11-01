@@ -6,10 +6,10 @@
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done (2026-11-01):** **Phase 3 built and verified** (uncommitted, on `feat/frontend-new-bulk-email`): the New Bulk Email page in the user's chosen **one-page layout**: upload with client-side checks, immediate server check (`/recipients/parse`), review report (tiles, notice, grouped problems table, unverified rows), prefilled message editor with field buttons, unknown-field warning and live preview, sticky send bar, confirmation dialog, `POST /batches`, redirect to the new batch's page with a toast. New: `src/api/recipients.ts`, `lib/template.ts`, `lib/problems.ts`, `composables/useBulkEmailDraft.ts`, `components/wizard/*`, generic `ConfirmDialog`, `NewBulkEmailView`. Spec in decision 0007. Checked: lint, type-check, 76 unit tests, build; in the browser against a real API on a scratch schema with `9_mixed_everything.xlsx`: real parse (1 valid, 7 skipped incl. a real domain rejection), message preview, confirm, batch queued, redirected, Mailpit received the email ("Update on your order, Eloise Dupont"). Bug caught on the way: Vue renders `inert="false"` as on, so the lock attribute is now omitted when unlocked. Scratch schema dropped; the real database still has 11 batches.
-- **Next (needs the user's go-ahead):** commit Phase 3 and merge to `main`, then Phase 4 (Settings with SMTP test email).
-- **Blocked on / waiting for the user:** (1) commit and merge Phase 3.
-- **Updated:** 2026-10-29
+- **Last done (2026-11-01):** **Phase 4 built and verified** (uncommitted, on `feat/frontend-settings`): the Settings page in the user's chosen **tabs layout** with all previewed settings editable: four tabs, per-tab Save/Discard with unsaved dots, reset to default, switch/select/text controls, write-only SMTP password (set, change, remove), "Test connection and save", a test-email box that uses unsaved values, server-message errors under the named field, restart notice from `restart_required`, read-only tab, no-login warning. New: `src/api/settings.ts`, `lib/settingsGroups.ts`, `composables/useSettingsForm.ts`, `queries/useSettings.ts`, `components/settings/*`, `components/ui/AppButton.vue`, `views/SettingsView.vue`. Spec in decision 0007. Checked: lint, type-check, 98 unit tests, build; in the browser against a real API on a scratch schema with an encryption key: save retries (server shows 7, "Changed here"), bad port (server message under the field), refused SMTP (nothing saved), WORKER_COUNT saved with the restart notice, test email delivered to Mailpit, password saved encrypted and never present in the page. Scratch schema dropped. The who-may-change-what policy is parked as a reminder in decision 0011.
+- **Next (needs the user's go-ahead):** commit Phase 4 and merge to `main`; then Phase 5 (Dashboard page). Also ask the user for the responsive issues (see Open questions) and remind them about decision 0011 before login or any non-localhost deploy.
+- **Blocked on / waiting for the user:** (1) commit and merge Phase 4.
+- **Updated:** 2026-11-01
 
 ## Why
 Staff need a web interface to send and monitor bulk emails instead of calling the API by hand. See [PROJECT.md](../PROJECT.md).
@@ -68,7 +68,7 @@ Everything below was built and verified, then removed on 2026-10-29 at the user'
 - [x] Phase 1: app shell, API client, typed API shapes, `StatusBadge`
 - [x] Phase 2: Bulk Emails list and detail (polling, Retry)
 - [x] Phase 3: New Bulk Email page (one-page layout)
-- [ ] Phase 4: Settings with SMTP test email
+- [x] Phase 4: Settings with SMTP test email (tabs)
 - [ ] Phase 5: Overview
 - [ ] Phase 6: Verify Emails and Single Email
 - [ ] Phase 7: Failures page (needs the backend Failures endpoint)

@@ -1,0 +1,242 @@
+<!doctype html><html lang="en" data-mode="open"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MailFlow preview: Settings</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&family=IBM+Plex+Sans:wght@300..700&family=DM+Sans:wght@300..800&family=Plus+Jakarta+Sans:wght@300..800&family=Manrope:wght@300..800&family=Noto+Sans+Bengali:wght@300..800&display=swap">
+<style>
+*{box-sizing:border-box;margin:0}
+body{font-family:var(--font);color:var(--tx);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.app{display:grid;grid-template-columns:var(--sbw) 1fr;min-height:100vh}
+.sb{display:flex;flex-direction:column;gap:2px}
+.sb nav{display:flex;flex-direction:column;gap:2px}
+.sb nav a{display:flex;align-items:center;gap:10px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:600}
+.nm small,.mut{display:block}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:var(--track);border-radius:99px;overflow:hidden;margin-bottom:4px;min-width:90px}
+.bar span{display:block;height:100%;background:var(--ac);border-radius:99px}
+.b{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.b i{font-style:normal;font-weight:700}
+.b-done{color:var(--ok)}.b-run{color:var(--ac)}.b-wait{color:var(--mu)}.b-fail{color:var(--bad)}.b-warn{color:var(--wn)}
+.lg{display:flex;gap:14px;font-size:12px;color:var(--mu)}.lg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+ul.at{list-style:none;padding:0}ul.at li{display:flex;justify-content:space-between;align-items:center;gap:12px}
+ul.at small{display:block}
+.tag{position:fixed;right:14px;bottom:14px;font:600 12px system-ui;background:#111;color:#fff;padding:6px 10px;border-radius:99px;opacity:.85}
+.tag a{text-decoration:underline;margin-left:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+@media(max-width:820px){.app{grid-template-columns:1fr}.sb{flex-direction:row!important;overflow-x:auto}.sb .brand{display:none}.sb nav{flex-direction:row}.sb nav span{display:none}.grid2,.bento{grid-template-columns:1fr!important}.kpis{grid-template-columns:1fr 1fr!important}}
+
+:root{--font:system-ui,-apple-system,"Segoe UI","Noto Sans Bengali",sans-serif;--bg:#EFEEEA;--tx:#161616;--mu:#77756F;--ac:#161616;--ok:#1F9D63;--bad:#E5484D;--wn:#C98A0B;--track:#E4E2DC;--sbw:262px;--pw:234px}
+html[data-mode="rail"]{--sbw:98px;--pw:70px}
+.app{display:block;padding-left:var(--sbw);transition:padding-left .22s ease}
+html[data-mode="rail"] .app:has(.sbi:not([data-hold]):hover),html[data-mode="rail"] .app:has(.sbi :focus-visible){padding-left:262px}
+.sbi{position:fixed;left:14px;top:14px;bottom:14px;width:var(--pw);background:#fff;border-radius:24px;padding:18px 10px;display:flex;flex-direction:column;gap:22px;overflow:hidden;z-index:20;transition:width .22s ease}
+html[data-mode="rail"] .sbi:not([data-hold]):hover,html[data-mode="rail"] .sbi:has(:focus-visible){width:234px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 9px;height:40px;white-space:nowrap;font-size:20px;letter-spacing:-.02em;color:#161616}
+.brand .mk{flex:none}.brand .wm{opacity:1;transition:opacity .15s}.brand b{font-weight:800}.brand .lt{font-weight:300}.brand .it{font-style:italic;font-weight:500;color:#FF6B2C}
+.sbi nav{display:flex;flex-direction:column;gap:6px}
+.sbi nav a{display:flex;align-items:center;gap:14px;height:48px;padding:0 15px;border-radius:16px;color:var(--mu);font-weight:500;font-size:15px;white-space:nowrap}
+.sbi nav a svg{flex:none}.sbi nav a:hover{background:#F1F0EC;color:#161616}.sbi nav a.on{background:#161616;color:#fff}
+.sbi nav a span{opacity:1;transition:opacity .15s}
+html[data-mode="rail"] .sbi:not(:has(:focus-visible)):is([data-hold],:not(:hover)) :is(nav span,.wm,.tog span){opacity:0}
+.tog{margin-top:auto;display:flex;align-items:center;gap:14px;height:48px;width:100%;padding:0 15px;border:0;border-radius:16px;background:#F5F4F0;color:var(--mu);font:500 14px inherit;font-family:inherit;white-space:nowrap;cursor:pointer;overflow:hidden}
+.tog:hover{background:#E9E8E3;color:#161616}.tog svg{flex:none}.tog span{transition:opacity .15s}
+.tog .ex{display:none}html[data-mode="rail"] .tog .ex{display:block}html[data-mode="rail"] .tog .co{display:none}
+main{padding:30px 34px 90px 20px;max-width:1280px;width:100%}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.hd h1{font-size:40px;font-weight:700;letter-spacing:-.02em}.hd p{color:var(--mu);margin-top:4px;font-size:14px}
+.btn{background:#161616;color:#fff;border-radius:99px;padding:13px 22px;font-weight:600;font-size:14px}
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.t{background:#fff;border-radius:24px;padding:24px}
+.t h2{font-size:var(--tt-size,14px);font-weight:var(--tt-w,600);color:var(--tt-c,var(--mu));letter-spacing:var(--tt-ls,0);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.k{background:#fff;border-radius:24px;padding:22px 24px;grid-column:span 3;display:flex;flex-direction:column;justify-content:space-between;min-height:170px}
+.k small{color:var(--mu);font-size:14px;font-weight:500}.k strong{font-size:54px;font-weight:700;letter-spacing:-.03em;line-height:1}.k em{font-style:normal;font-size:13px;color:var(--mu)}
+.k:nth-child(1){background:#161616;color:#fff}.k:nth-child(1) small,.k:nth-child(1) em{color:#BDBBB4}
+.k:nth-child(2) strong{color:var(--bad)}
+.kpis{display:contents}
+.c-chart{grid-column:span 8}.c-attn{grid-column:span 4;background:#FFE9C7}.c-tbl{grid-column:span 12}
+.c-attn h2{color:var(--tt-ca,#7A5A1E)}ul.at li{padding:12px 0;border-top:1px solid rgba(0,0,0,.08)}ul.at li:first-child{border:0;padding-top:0}ul.at b{font-size:14px}ul.at small{font-size:12.5px;color:#7A5A1E;margin-top:2px}ul.at a{background:#161616;color:#fff;border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:600}
+th{font-size:var(--th-size,12px);color:var(--th-c,var(--mu));padding:0 10px 12px;font-weight:var(--th-w,500);text-transform:var(--th-tf,none);letter-spacing:var(--th-ls,0)}td{padding:14px 10px;border-top:1px solid #EFEEEA;font-size:14px}
+td.nm{font-weight:600}.nm small{color:var(--mu);font-weight:400;font-size:12.5px}td small{color:var(--mu);font-size:12px}.mut{color:var(--mu);font-size:13px}
+.bar span{background:#161616}
+.b{padding:5px 12px;border-radius:99px;font-size:12.5px;font-weight:600;background:#F3F2EE}
+.dock{position:fixed;right:14px;bottom:14px;z-index:30;background:#161616;color:#fff;border-radius:18px;padding:10px 12px;font:600 12px system-ui;display:flex;gap:14px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 28px);justify-content:flex-end;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.dock .g{display:flex;gap:4px;align-items:center}.dock .g>span{opacity:.6;margin-right:4px}
+.dock button{font:inherit;color:#fff;background:#2B2B2B;border:0;border-radius:99px;padding:6px 11px;cursor:pointer}
+.dock button[aria-pressed="true"]{background:#fff;color:#161616}
+.dock.min>.g{display:none}.dock.min #dockmin{display:inline-block}
+@media(max-width:820px){.app{padding-left:0}.sbi{position:static;width:auto!important;margin:12px;border-radius:20px;flex-direction:row;align-items:center;padding:10px;overflow-x:auto;box-shadow:none!important}.sbi nav{flex-direction:row}.sbi nav span,.sbi .tog,.brand .wm{display:none}.k,.c-chart,.c-attn,.c-tbl{grid-column:span 12}.hd h1{font-size:30px}main{padding:12px 14px 120px}}
+
+:root{--mu:#66645E;--tt-size:18px;--tt-w:700;--tt-c:#161616;--tt-ca:#4A3410;--tt-ls:-.01em;--th-size:11px;--th-w:600;--th-c:#66645E;--th-tf:uppercase;--th-ls:.06em;--font:'Plus Jakarta Sans','Noto Sans Bengali',system-ui,sans-serif}
+.b-done{color:#12704A}.b-fail{color:#C62E33}.b-warn{color:#8A5A00}.b-run{color:#161616}.b-wait{color:#66645E}
+.view{display:none}.view.on{display:block}
+.crumb{display:inline-flex;align-items:center;gap:6px;color:var(--mu);font-size:13px;font-weight:600;margin-bottom:8px;cursor:pointer;background:none;border:0;font-family:inherit}.crumb:hover{color:#161616}
+.hd h1{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.hd h1 .b{font-size:13px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tabs button{font:600 13px inherit;font-family:inherit;border:0;border-radius:99px;background:#F3F2EE;color:#161616;padding:8px 14px;cursor:pointer}.tabs button span{color:var(--mu);font-weight:500;margin-left:6px}.tabs button.on{background:#161616;color:#fff}.tabs button.on span{color:#d9d7d0}
+.bar2{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.search{border:1.5px solid #E4E2DC;border-radius:99px;padding:9px 16px;font:500 14px inherit;font-family:inherit;min-width:240px;background:#fff}.search:focus{outline:2px solid #161616;outline-offset:2px}
+tr.clk{cursor:pointer}tr.clk:hover td{background:#FAF9F6}
+td.err{color:#C62E33;font-size:13px;max-width:230px}.ib{border:0;background:#F3F2EE;border-radius:99px;width:32px;height:32px;cursor:pointer;font-size:15px}.ib:hover{background:#E4E2DC}
+.pg{display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid #EFEEEA;margin-top:4px;font-size:13px;color:var(--mu)}.pg div{display:flex;gap:8px}.pg button{font:600 13px inherit;font-family:inherit;border:0;background:#F3F2EE;border-radius:99px;padding:8px 14px;cursor:pointer}.pg button[disabled]{opacity:.45;cursor:default}
+.prog{grid-column:span 12;display:flex;align-items:center;gap:18px}.prog .bar{flex:1;height:10px;margin:0}.prog b{font-size:14px}
+.btn{border:0;cursor:pointer;font-family:inherit}
+.sec{background:#161616;color:#fff;border-radius:99px;padding:12px 18px;font:600 14px inherit;font-family:inherit;border:0;cursor:pointer}
+.scrim{position:fixed;inset:0;background:rgba(22,22,22,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}.scrim.on{opacity:1;pointer-events:auto}
+.panel{position:fixed;z-index:41;background:#fff;display:flex;flex-direction:column;overflow:auto;transition:transform .25s ease,opacity .2s}
+body[data-pstyle="side"] #panel{right:14px;top:14px;bottom:14px;width:min(440px,calc(100vw - 28px));border-radius:24px;transform:translateX(calc(100% + 28px))}
+body[data-pstyle="side"] #panel.on{transform:none}
+body[data-pstyle="dialog"] #panel{left:50%;top:50%;width:min(560px,calc(100vw - 28px));max-height:calc(100vh - 40px);border-radius:24px;transform:translate(-50%,-46%);opacity:0;pointer-events:none}
+body[data-pstyle="dialog"] #panel.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
+#confirm{left:50%;top:50%;width:min(420px,calc(100vw - 28px));border-radius:24px;transform:translate(-50%,-46%);opacity:0;pointer-events:none}
+#confirm.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
+#panel:not(.on){visibility:hidden;transition:transform .25s ease,opacity .2s,visibility 0s .25s}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;padding:22px 24px 14px;gap:12px}.ph h2{font-size:18px;font-weight:700;letter-spacing:-.01em}.ph small{color:var(--mu);font-size:13px}
+.x{border:0;background:#F3F2EE;border-radius:99px;width:34px;height:34px;cursor:pointer;font-size:16px;flex:none}.x:hover{background:#E4E2DC}
+.pb{padding:0 24px 12px;display:flex;flex-direction:column;gap:16px}
+.fld small{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin-bottom:4px}.fld div{font-size:14px;line-height:1.5}
+.errbox{background:#FFE9C7;color:#4A3410;border-radius:16px;padding:12px 14px;font-size:13.5px;line-height:1.5}
+.bodybox{background:#F5F4F0;border-radius:16px;padding:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pf{margin-top:auto;padding:14px 24px 22px;display:flex;gap:10px;justify-content:flex-end}
+.ghost{border:0;background:#F3F2EE;border-radius:99px;padding:12px 18px;font:600 14px inherit;font-family:inherit;cursor:pointer}
+.sw{position:fixed;left:50%;transform:translateX(-50%);bottom:68px;background:#161616;color:#fff;border-radius:99px;padding:10px 18px;font:600 13px system-ui;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}.sw.on{opacity:1}
+.dock{z-index:30}
+
+:root{--mu:#66645E;--tt-size:18px;--tt-w:700;--tt-c:#161616;--tt-ca:#4A3410;--tt-ls:-.01em;--th-size:11px;--th-w:600;--th-c:#66645E;--th-tf:uppercase;--th-ls:.06em;--font:'Plus Jakarta Sans','Noto Sans Bengali',system-ui,sans-serif}
+button{font-family:inherit}
+.sec{background:#161616;color:#fff;border-radius:99px;padding:11px 20px;font:600 14px inherit;font-family:inherit;border:0;cursor:pointer}.sec[disabled]{opacity:.35;cursor:default}
+.ghost{border:0;background:#F3F2EE;border-radius:99px;padding:11px 18px;font:600 14px inherit;font-family:inherit;cursor:pointer}.ghost:hover{background:#E4E2DC}.ghost[disabled]{opacity:.45;cursor:default}
+.notice{border-radius:16px;padding:13px 16px;font-size:14px;line-height:1.55;margin-bottom:14px}.notice.warn{background:#FFE9C7;color:#4A3410}.notice.ok{background:#E4F5EC;color:#0E4F35}.notice.err{background:#FDE9EA;color:#7A1D21}
+.card{background:#fff;border-radius:24px;padding:24px}.card h2{font-size:18px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.card .sub{color:var(--mu);font-size:13.5px;margin-bottom:16px}
+.dirty{font:600 11px system-ui;background:#FFE9C7;color:#4A3410;border-radius:99px;padding:3px 9px;display:none}.card.isdirty .dirty{display:inline-block}
+.row{display:grid;grid-template-columns:minmax(150px,230px) 1fr;gap:8px 20px;padding:14px 0;border-top:1px solid #EFEEEA;align-items:start}.row:first-of-type{border-top:0}
+.row .lab b{display:block;font:600 13px ui-monospace,Menlo,monospace;margin-bottom:3px;word-break:break-all}.row .lab small{color:var(--mu);font-size:12.5px;line-height:1.45;display:block}
+.mtags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.mtag{font:600 11px system-ui;border-radius:99px;padding:3px 9px;background:#F3F2EE;color:#4a4842}.mtag.warn{background:#FFE9C7;color:#4A3410}.mtag.ok{background:#E4F5EC;color:#0E4F35}
+.inp,select.inp{width:100%;max-width:420px;border:1.5px solid #E4E2DC;border-radius:14px;padding:10px 14px;font:500 14.5px inherit;font-family:inherit;background:#fff}.inp:focus{outline:2px solid #161616;outline-offset:2px}.inp[readonly]{background:#F5F4F0;color:var(--mu)}.inp.bad{border-color:#C62E33}
+.err{color:#C62E33;font-size:12.5px;margin-top:6px;display:none}.row.hasErr .err{display:block}
+.lnk{border:0;background:none;color:#161616;text-decoration:underline;font:600 12.5px inherit;font-family:inherit;cursor:pointer;padding:0;margin-left:12px}
+.sw{position:relative;width:46px;height:26px;border-radius:99px;background:#D6D4CC;border:0;cursor:pointer;vertical-align:middle}.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}.sw[aria-checked=true]{background:#161616}.sw[aria-checked=true]::after{left:23px}
+.pwline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}
+.cardfoot{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid #EFEEEA}
+.testbox{background:#F5F4F0;border-radius:16px;padding:14px 16px;margin-top:12px}.testbox .line{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.testbox .inp{max-width:300px}.testbox p{font-size:13.5px;margin-top:8px}
+.spin{display:inline-block;width:14px;height:14px;border:2.5px solid #D6D4CC;border-top-color:#161616;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes sp{to{transform:rotate(360deg)}}
+.grid2s{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}.grid2s .wide{grid-column:span 2}
+.stack{display:flex;flex-direction:column;gap:14px}
+.sticky{position:sticky;bottom:12px;background:#161616;color:#fff;border-radius:99px;padding:10px 12px 10px 24px;display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:14px;z-index:10;box-shadow:0 10px 30px rgba(0,0,0,.2)}.sticky .sec{background:#fff;color:#161616}.sticky .ghost{background:#2b2b2b;color:#fff}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.tabs button{font:600 13.5px inherit;font-family:inherit;border:0;border-radius:99px;background:#fff;color:#161616;padding:10px 16px;cursor:pointer}.tabs button.on{background:#161616;color:#fff}.tabs button i{font-style:normal;display:inline-block;width:8px;height:8px;border-radius:50%;background:#E58A00;margin-left:8px}
+.toast{position:fixed;left:50%;bottom:84px;transform:translate(-50%,8px);background:#161616;color:#fff;border-radius:99px;padding:10px 20px;font:600 13.5px system-ui;z-index:60;opacity:0;transition:.25s;pointer-events:none}.toast.on{opacity:1;transform:translate(-50%,0)}
+.dock{top:14px;bottom:auto;z-index:30}
+@media(max-width:900px){.grid2s{grid-template-columns:1fr}.grid2s .wide{grid-column:auto}.row{grid-template-columns:1fr}}
+</style></head><body>
+<div class="app"><aside class="sbi"><div class="brand"><svg class="mk" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" ><g stroke="#FF6B2C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M28 4 4 13l9 4 4 9z"/><path d="M28 4 13 17"/></g></svg><span class="wm"><b>Mail</b><span class="lt">Flow</span></span></div><nav id="nav"></nav><button class="tog" id="tog" aria-expanded="true"><svg class="co" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg><svg class="ex" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg><span id="togl">Collapse sidebar</span></button></aside>
+<main id="main"></main></div>
+<div class="toast" id="toast"></div>
+<div class="dock"><div class="g"><span>Settings layout</span><button data-l="A" aria-pressed="true">A · Grouped tiles</button><button data-l="B" aria-pressed="false">B · One long form</button><button data-l="C" aria-pressed="false">C · Tabs</button></div><div class="g"><span>Demo</span><button id="reset">Start over</button></div></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const NAVS=[['Dashboard','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>'],['Bulk Emails','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>'],['Single Email','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>'],['Verify Emails','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'],['Failures','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'],['Settings','<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>']];
+$('#nav').innerHTML=NAVS.map(([n,i])=>`<a href="#" class="${n==='Settings'?'on':''}" aria-label="${n}">${i}<span>${n}</span></a>`).join('');
+$$('#nav a').forEach(a=>a.onclick=e=>e.preventDefault());
+let mode='open';const sb=$('.sbi');
+function setMode(m){mode=m;document.documentElement.dataset.mode=m;$('#tog').setAttribute('aria-expanded',m==='open');$('#togl').textContent=m==='open'?'Collapse sidebar':'Keep sidebar open'}
+$('#tog').onclick=()=>{if(mode==='open'){setMode('rail');sb.setAttribute('data-hold','')}else{setMode('open');sb.removeAttribute('data-hold')}};
+sb.addEventListener('mouseleave',()=>sb.removeAttribute('data-hold'));
+/* data, shaped like GET /settings */
+const GROUPS=[
+ {id:'smtp',title:'Sender and SMTP',sub:'Where email is sent from. Saving connects to the server first and refuses the change if that fails.',keys:['MAIL_FROM','SMTP_HOST','SMTP_PORT','SMTP_TLS_MODE','SMTP_USERNAME','SMTP_PASSWORD']},
+ {id:'send',title:'Sending behaviour',sub:'How recipients are checked and how often delivery is attempted.',keys:['DOMAIN_CHECK_ENABLED','MAX_JOB_RETRIES']},
+ {id:'srv',title:'Server limits',sub:'Saved now, used the next time the server starts.',keys:['WORKER_COUNT','SMTP_POOL_SIZE','JOB_POLL_INTERVAL']},
+ {id:'ro',title:'Read-only',sub:'Shown for reference. These can only be changed in the server environment.',keys:['HTTP_ADDR','HTTP_READ_TIMEOUT','HTTP_WRITE_TIMEOUT']}];
+const DEF={
+ MAIL_FROM:{d:'Sender address on every outgoing email',kind:'string',value:'MailFlow <noreply@shop.example>',src:'env',apply:'instant',env:'MailFlow <noreply@shop.example>'},
+ SMTP_HOST:{d:'SMTP server hostname',kind:'string',value:'smtp.mailprovider.example',src:'override',apply:'instant',env:'localhost'},
+ SMTP_PORT:{d:'SMTP server port (587 for STARTTLS, 465 for implicit TLS, 1025 for Mailpit)',kind:'int',value:'587',src:'override',apply:'instant',env:'1025'},
+ SMTP_TLS_MODE:{d:'Encryption to the SMTP server',kind:'enum',options:['auto','none','starttls','tls'],value:'starttls',src:'override',apply:'instant',env:'auto'},
+ SMTP_USERNAME:{d:'SMTP login (leave empty for servers without authentication)',kind:'string',value:'apikey',src:'override',apply:'instant',env:''},
+ SMTP_PASSWORD:{d:'SMTP password (write-only: never shown again after saving)',kind:'secret',value:'',has:true,src:'override',apply:'instant',env:''},
+ DOMAIN_CHECK_ENABLED:{d:'Reject recipients whose domain has no mail server (DNS/MX check)',kind:'bool',value:'true',src:'env',apply:'instant',env:'true'},
+ MAX_JOB_RETRIES:{d:'Delivery attempts per email before it is marked failed (applies to new uploads)',kind:'int',value:'3',src:'env',apply:'instant',env:'3'},
+ WORKER_COUNT:{d:'Background workers sending emails in parallel',kind:'int',value:'3',src:'env',apply:'restart',env:'3'},
+ SMTP_POOL_SIZE:{d:'Maximum simultaneous SMTP connections',kind:'int',value:'3',src:'env',apply:'restart',env:'3'},
+ JOB_POLL_INTERVAL:{d:'How often idle workers check for new jobs (e.g. 500ms)',kind:'duration',value:'500ms',src:'env',apply:'restart',env:'500ms'},
+ HTTP_ADDR:{d:'Address the API listens on (changing it would cut off this page)',kind:'string',value:':8080',src:'env',apply:'readonly'},
+ HTTP_READ_TIMEOUT:{d:'Maximum time to read a request, including uploads',kind:'duration',value:'30s',src:'env',apply:'readonly'},
+ HTTP_WRITE_TIMEOUT:{d:'Maximum time a request may take before its response is written',kind:'duration',value:'30s',src:'env',apply:'readonly'}};
+let S,layout='A',tab='smtp';
+function fresh(){S={};for(const k in DEF){S[k]={...DEF[k],orig:DEF[k].value,origSrc:DEF[k].src,pw:null,rmPw:false}};S.restartNote=false;S.test={state:'idle',msg:''}}
+fresh();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2600)}
+/* validation like the Go catalog */
+function validate(k,v){
+ if(k==='MAIL_FROM'&&!/^[^<>\s@][^<>@]*(<[^<>\s@]+@[^<>\s@]+>)?$|^[^\s@]+@[^\s@]+$/.test(v.trim())&&!/<[^<>\s@]+@[^<>\s@]+>/.test(v))return 'Enter an address like name@example.com or Name <name@example.com>.';
+ if(k==='SMTP_HOST'&&!v.trim())return 'SMTP_HOST is required.';
+ if(k==='SMTP_PORT'){const n=+v;if(!Number.isInteger(n)||n<1||n>65535)return 'Port must be a whole number from 1 to 65535.'}
+ if(k==='MAX_JOB_RETRIES'){const n=+v;if(!Number.isInteger(n)||n<1||n>20)return 'Use a whole number from 1 to 20.'}
+ if(k==='WORKER_COUNT'||k==='SMTP_POOL_SIZE'){const n=+v;if(!Number.isInteger(n)||n<1||n>100)return 'Use a whole number from 1 to 100.'}
+ if(k==='JOB_POLL_INTERVAL'&&!/^\d+(ms|s|m)$/.test(v))return 'Use a duration like 500ms or 2s (between 50ms and 1m).';
+ return ''}
+const isDirty=k=>{const s=S[k];return s.apply!=='readonly'&&(s.value!==s.orig||(s.kind==='secret'&&(s.pw!==null||s.rmPw)))};
+const dirtyIn=g=>g.keys.filter(isDirty);
+function field(k){
+ const s=S[k];let ctl='';
+ if(s.apply==='readonly')ctl=`<input class="inp" readonly value="${esc(s.value)}" aria-label="${k}">`;
+ else if(s.kind==='bool')ctl=`<button class="sw" role="switch" aria-checked="${s.value==='true'}" data-k="${k}" aria-label="${k}"></button> <span style="margin-left:8px;font-size:14px">${s.value==='true'?'On':'Off'}</span>`;
+ else if(s.kind==='enum')ctl=`<select class="inp" data-k="${k}" aria-label="${k}">${s.options.map(o=>`<option ${o===s.value?'selected':''}>${o}</option>`).join('')}</select>`;
+ else if(s.kind==='secret'){
+  if(s.pw!==null)ctl=`<div class="pwline"><input class="inp" type="password" data-k="${k}" data-pw placeholder="New password" aria-label="${k}" autocomplete="new-password" value="${esc(s.pw)}"><button class="lnk" data-cancelpw="${k}">Cancel</button></div>`;
+  else if(s.rmPw)ctl=`<div class="pwline"><span>Password will be removed when you save.</span><button class="lnk" data-undo="${k}">Undo</button></div>`;
+  else ctl=`<div class="pwline"><span class="mtag ${s.has?'ok':''}">${s.has?'Password is set':'No password'}</span><button class="ghost" data-chpw="${k}">${s.has?'Change password':'Set password'}</button>${s.has?`<button class="lnk" data-rmpw="${k}">Remove</button>`:''}</div>`}
+ else ctl=`<input class="inp" data-k="${k}" value="${esc(s.value)}" aria-label="${k}" ${s.kind==='int'?'inputmode="numeric"':''}>`;
+ const tags=[];
+ if(s.apply==='restart')tags.push('<span class="mtag warn">Needs a restart</span>');else if(s.apply==='instant')tags.push('<span class="mtag">Applies instantly</span>');else tags.push('<span class="mtag">Read-only</span>');
+ tags.push(`<span class="mtag ${s.src==='override'?'ok':''}">${s.src==='override'?'Changed here':'From environment'}</span>`);
+ const reset=(s.src==='override'&&s.apply!=='readonly')?`<button class="lnk" data-reset="${k}" style="margin-left:0;margin-top:6px">Reset to default</button>`:'';
+ return `<div class="row" data-row="${k}"><div class="lab"><b>${k}</b><small>${esc(s.d)}</small><div class="mtags">${tags.join('')}</div>${reset}</div><div>${ctl}<div class="err" data-err="${k}"></div></div></div>`}
+function testBox(){
+ const t=S.test;return `<div class="testbox"><b style="font-size:14px">Send a test email</b><p style="margin:2px 0 10px;color:var(--mu)">Uses the values above, even if they are not saved yet.</p><div class="line"><input class="inp" id="testto" value="you@shop.example" aria-label="Send test to"><button class="ghost" id="testbtn" ${t.state==='sending'?'disabled':''}>${t.state==='sending'?'<span class="spin"></span>Sending…':'Send test email'}</button></div>${t.state==='ok'?`<p style="color:#0E4F35"><b>✓</b> ${esc(t.msg)}</p>`:t.state==='err'?`<p style="color:#C62E33" role="alert"><b>✕</b> ${esc(t.msg)}</p>`:''}</div>`}
+function group(g,saveMode){
+ const rows=g.keys.map(field).join('');
+ const foot=saveMode==='group'&&g.id!=='ro'?`<div class="cardfoot"><button class="ghost" data-discard="${g.id}" disabled>Discard</button><button class="sec" data-save="${g.id}" disabled>${g.id==='smtp'?'Test connection and save':'Save changes'}</button></div>`:'';
+ const note=(g.id==='srv'&&S.restartNote)?`<div class="notice warn" style="margin-top:14px"><b>Saved. Restart the server to apply.</b> The new values are stored and will be used the next time it starts.</div>`:'';
+ return `<section class="card" data-g="${g.id}"><h2>${g.title}<span class="dirty">Unsaved changes</span></h2><p class="sub">${g.sub}</p>${rows}${g.id==='smtp'?testBox():''}${note}${foot}</section>`}
+function banner(){return `<div class="notice warn"><b>There is no login yet.</b> Anyone who can reach this API can change where email is sent from and the SMTP password. Keep it on a private network until sign-in exists.</div>`}
+function render(){
+ const m=$('#main');let h=`<div class="hd"><div><h1>Settings</h1><p>Sender, SMTP and sending behaviour</p></div></div>`+banner();
+ if(layout==='A')h+=`<div class="grid2s">${GROUPS.map((g,i)=>group(g,'group').replace('<section class="card"',`<section class="card ${i===0?'wide':''}"`)).join('')}</div>`;
+ else if(layout==='B')h+=`<div class="stack">${GROUPS.map(g=>group(g,'page')).join('')}</div><div class="sticky"><span id="stickyTxt">No unsaved changes</span><span style="display:flex;gap:8px"><button class="ghost" id="discardAll" disabled>Discard all</button><button class="sec" id="saveAll" disabled>Save all changes</button></span></div>`;
+ else h+=`<div class="tabs" role="tablist">${GROUPS.map(g=>`<button data-tab="${g.id}" class="${tab===g.id?'on':''}" role="tab" aria-selected="${tab===g.id}">${g.title}<i data-tdot="${g.id}" style="display:none"></i></button>`).join('')}</div>`+group(GROUPS.find(g=>g.id===tab),'group');
+ m.innerHTML=h;bind();updDirty();$$('[data-l]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===layout))}
+function updDirty(){
+ let total=0;
+ GROUPS.forEach(g=>{const d=dirtyIn(g).length;total+=d;const card=$(`[data-g="${g.id}"]`);if(card){card.classList.toggle('isdirty',d>0);const sv=card.querySelector('[data-save]'),ds=card.querySelector('[data-discard]');if(sv)sv.disabled=d===0;if(ds)ds.disabled=d===0}const dot=$(`[data-tdot="${g.id}"]`);if(dot)dot.style.display=d?'inline-block':'none'});
+ const st=$('#stickyTxt');if(st){st.innerHTML=total?`<b>${total}</b> unsaved ${total===1?'change':'changes'}`:'No unsaved changes';$('#saveAll').disabled=!total;$('#discardAll').disabled=!total}}
+function showErr(k,msg){const r=$(`[data-row="${k}"]`);if(!r)return;r.classList.toggle('hasErr',!!msg);const e=r.querySelector('[data-err]');if(e)e.textContent=msg;const i=r.querySelector('.inp');if(i)i.classList.toggle('bad',!!msg)}
+function bind(){
+ $$('[data-k]').forEach(el=>{
+  if(el.classList.contains('sw'))el.onclick=()=>{const k=el.dataset.k;S[k].value=S[k].value==='true'?'false':'true';keep(render)};
+  else el.oninput=el.onchange=()=>{const k=el.dataset.k;if(el.hasAttribute('data-pw'))S[k].pw=el.value;else S[k].value=el.value;showErr(k,'');updDirty()}});
+ $$('[data-chpw]').forEach(b=>b.onclick=()=>{S[b.dataset.chpw].pw='';keep(render)});
+ $$('[data-cancelpw]').forEach(b=>b.onclick=()=>{S[b.dataset.cancelpw].pw=null;keep(render)});
+ $$('[data-rmpw]').forEach(b=>b.onclick=()=>{S[b.dataset.rmpw].rmPw=true;keep(render)});
+ $$('[data-undo]').forEach(b=>b.onclick=()=>{S[b.dataset.undo].rmPw=false;keep(render)});
+ $$('[data-reset]').forEach(b=>b.onclick=()=>{const k=b.dataset.reset,s=S[k];s.value=s.env;s.src='env';s.orig=s.env;if(s.kind==='secret'){s.has=false;s.pw=null;s.rmPw=false}toast(k+' reset to its default');keep(render)});
+ $$('[data-save]').forEach(b=>b.onclick=()=>save(GROUPS.filter(g=>g.id===b.dataset.save)));
+ $$('[data-discard]').forEach(b=>b.onclick=()=>discard(GROUPS.filter(g=>g.id===b.dataset.discard)));
+ const sa=$('#saveAll');if(sa)sa.onclick=()=>save(GROUPS.filter(g=>g.id!=='ro'));const da=$('#discardAll');if(da)da.onclick=()=>discard(GROUPS);
+ $$('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+ const tb=$('#testbtn');if(tb)tb.onclick=sendTest}
+function keep(fn){const y=scrollY;fn();scrollTo(0,y)}
+function discard(gs){gs.forEach(g=>g.keys.forEach(k=>{const s=S[k];s.value=s.orig;s.pw=null;s.rmPw=false}));keep(render)}
+function smtpBad(){return /fail/i.test(S.SMTP_HOST.value)}
+function save(gs){
+ let bad=false;
+ gs.forEach(g=>g.keys.forEach(k=>{if(isDirty(k)&&S[k].apply!=='readonly'&&S[k].kind!=='secret'&&S[k].kind!=='bool'&&S[k].kind!=='enum'){const e=validate(k,S[k].value);showErr(k,e);if(e)bad=true}}));
+ if(bad){toast('Fix the highlighted fields first');return}
+ const touchesSmtp=gs.some(g=>g.id==='smtp'&&dirtyIn(g).length);
+ const apply=()=>{gs.forEach(g=>g.keys.forEach(k=>{if(!isDirty(k))return;const s=S[k];if(s.kind==='secret'){if(s.rmPw){s.has=false;s.rmPw=false;s.pw=null}else if(s.pw){s.has=true;s.pw=null}}s.orig=s.value;if(s.value!==s.env||s.kind==='secret'&&s.has)s.src='override';else s.src='env';if(s.apply==='restart')S.restartNote=true}));toast('Settings saved');keep(render)};
+ if(touchesSmtp){toast('Connecting to the SMTP server…');setTimeout(()=>{if(smtpBad()){showErr('SMTP_HOST','SMTP connection failed: dial tcp: lookup '+S.SMTP_HOST.value+': no such host. Nothing was saved.')}else apply()},900)}else apply()}
+function sendTest(){S.test={state:'sending',msg:''};keep(render);const to=$('#testto')?.value;setTimeout(()=>{S.test=smtpBad()?{state:'err',msg:'502: could not connect to '+S.SMTP_HOST.value+' ('+'connection refused'+'). No email was sent.'}:{state:'ok',msg:'Test email sent to '+(to||'you@shop.example')+'. Check the inbox.'};keep(render)},1000)}
+$$('[data-l]').forEach(b=>b.onclick=()=>{layout=b.dataset.l;render()});
+$('#reset').onclick=()=>{fresh();render()};
+setMode('open');render();
+</script></body></html>

@@ -84,5 +84,17 @@ Reference: `frontend/design-previews/c-new-bulk-email.html` (layout B). The user
 - Skipped rows are the API's invalid rows; unverified rows are still sent.
 - Not included: "send me a test email", a downloadable sample file, saving a draft.
 
+## Settings page (Phase 4, decided 2026-11-01)
+Reference: `frontend/design-previews/c-settings.html` (layout C). The user chose **tabs** over grouped tiles (A) and one long form (B), with **every setting from the preview editable**.
+- A yellow "There is no login yet" notice sits above everything.
+- Tabs: **Sender and SMTP**, **Sending behaviour**, **Server limits**, **Read-only**. A tab with unsaved edits shows an orange dot. Edits are kept when switching tabs. Arrow keys move between tabs.
+- One white card per tab with the group title and a one-line explanation. Each setting is a row: the key in monospace, its description, tags ("Applies instantly" / "Needs a restart" and "From environment" / "Changed here"), "Reset to default" for changed ones (applies at once), and the control (text box, select, On/Off switch, read-only box).
+- **Save per tab:** Discard and Save at the bottom right, off until something changed. The SMTP tab's button reads "Test connection and save" (the server tests the connection first and refuses the save if it fails; nothing is saved then). A refusal that names a setting shows under that field, any other refusal above the buttons.
+- **SMTP password** is never shown: "Password is set" / "No password" with Change password, Set password and Remove (saves an empty password). Typing replaces it.
+- **Send a test email** box in the SMTP tab uses the values on screen even if unsaved (a new password only if typed); the server's real error is shown on failure. The address is prefilled with `MAIL_FROM`.
+- **Server limits** saves normally; a "Saved. Restart the server to apply." notice shows whenever the server reports `restart_required`. The page cannot restart the server.
+- `MAIL_FROM` must be a plain address (`hello@example.com`); the backend rejects `Name <address>` (the preview wrongly showed that form).
+- Who may change what is parked in [0011](0011-settings-editing-policy.md).
+
 ## Still open
 Dark mode (none for the MVP).

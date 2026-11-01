@@ -7,13 +7,14 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Feature | Status | Doc | Notes |
 |---|---|---|---|
 | Dashboard: backend APIs | done | [features/dashboard.md](features/dashboard.md) | batch list, paged jobs, retry, stats, settings, STARTTLS, CORS, goose |
-| Dashboard: Vue frontend | in progress (Phases 1-3 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-new-bulk-email`; app shell, Bulk Emails and New Bulk Email done; next Phase 4 Settings |
+| Dashboard: Vue frontend | in progress (Phases 1-4 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-new-bulk-email`; app shell, Bulk Emails and New Bulk Email done; next Phase 5 Dashboard |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |
 | Activity log | proposed | (no doc yet) | audit trail of sends, retries, settings changes |
 | Subject in Bulk Email list | proposed | [decisions/0009](decisions/0009-bulk-email-row-title.md) | add `subject_template` to the batch API responses so rows can show the subject (options B and C in the decision) |
 | Live progress by server push | proposed | [decisions/0010](decisions/0010-live-progress-polling.md) | SSE/WebSocket instead of polling (option D); needs a Go events endpoint |
+| Settings editing policy | proposed (parked) | [decisions/0011](decisions/0011-settings-editing-policy.md) | tiers of who may change which setting, `SETTINGS_EDITABLE` kill switch, pool>=workers check, audit trail; **remind the user** before login or any non-localhost deploy |
 | Authentication and roles | deferred | [decisions/0002](decisions/0002-no-auth-for-now.md) | needed before the API leaves localhost |
 
 ## Branches
