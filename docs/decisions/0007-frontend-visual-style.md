@@ -96,5 +96,13 @@ Reference: `frontend/design-previews/c-settings.html` (layout C). The user chose
 - `MAIL_FROM` must be a plain address (`hello@example.com`); the backend rejects `Name <address>` (the preview wrongly showed that form).
 - Who may change what is parked in [0011](0011-settings-editing-policy.md).
 
+## Verify Emails and Single Email (Phase 6, decided 2026-11-01)
+Reference: `frontend/design-previews/c-verify-single.html`.
+- **Verify Emails, layout A (stacked cards):** an Upload card (same drop zone, client-side `.xlsx`/10 MB checks, server check on choosing the file) and, once checked, a **Result** card: the same three tiles, problem tabs and table as New Bulk Email, with the notice reworded for checking ("N rows have problems. They would be skipped if you used this file. Fix them in the spreadsheet and check it again."). Nothing is sent or saved. Buttons: **Check another file** and **Continue to New Bulk Email** (disabled when no row is valid). No "Download problems" button (decided against).
+- **Continue to New Bulk Email** hands the already-checked file and result over (Pinia store, taken once), so the next page starts with the file loaded and is not uploaded or checked a second time.
+- **Single Email, layout C (mail window):** one white window with a black header ("New message", "from <MAIL_FROM>" read from the settings, hidden if it cannot be loaded), To and Subject on one line each with tiny uppercase labels, a large message area, and a footer with "Plain text · sent immediately" and **Send email**. Errors appear under the field only after the first attempt.
+- **Behaviour:** confirmation dialog before sending ("Send this email now? It will be sent to X immediately. This cannot be undone."); **no** "send to myself" shortcut; after sending, a green **Email sent** banner ("Sent to X. Send another") with the form left filled, and the banner disappears when the form is edited; "Send another" empties the form. A failed send shows a red alert (server message, plus "Check the SMTP settings and the server log." for a 502) and always says nothing was sent; the text is kept.
+- The backend returns only the generic message "failed to send email" for a mail-server failure (the reason is in the server log only), so the page cannot show the real SMTP reason.
+
 ## Still open
 Dark mode (none for the MVP).

@@ -6,9 +6,9 @@
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done (2026-11-01):** **Phase 4 built and verified** (uncommitted, on `feat/frontend-settings`): the Settings page in the user's chosen **tabs layout** with all previewed settings editable: four tabs, per-tab Save/Discard with unsaved dots, reset to default, switch/select/text controls, write-only SMTP password (set, change, remove), "Test connection and save", a test-email box that uses unsaved values, server-message errors under the named field, restart notice from `restart_required`, read-only tab, no-login warning. New: `src/api/settings.ts`, `lib/settingsGroups.ts`, `composables/useSettingsForm.ts`, `queries/useSettings.ts`, `components/settings/*`, `components/ui/AppButton.vue`, `views/SettingsView.vue`. Spec in decision 0007. Checked: lint, type-check, 98 unit tests, build; in the browser against a real API on a scratch schema with an encryption key: save retries (server shows 7, "Changed here"), bad port (server message under the field), refused SMTP (nothing saved), WORKER_COUNT saved with the restart notice, test email delivered to Mailpit, password saved encrypted and never present in the page. Scratch schema dropped. The who-may-change-what policy is parked as a reminder in decision 0011.
-- **Next (needs the user's go-ahead):** commit Phase 4 and merge to `main`; then Phase 5 (Dashboard page). Also ask the user for the responsive issues (see Open questions) and remind them about decision 0011 before login or any non-localhost deploy.
-- **Blocked on / waiting for the user:** (1) commit and merge Phase 4.
+- **Last done (2026-11-01):** **Phase 6 built, verified, committed and merged into `main`**: **Verify Emails** (stacked layout, same report as New Bulk Email in "verify" wording, "Check another file", and "Continue to New Bulk Email" which hands the checked file over through a small Pinia store so it is not uploaded twice) and **Single Email** (mail-window layout, sender shown in the header, confirmation before sending, success banner with "Send another", clear error state). New: `composables/useRecipientCheck.ts` (shared by Verify and New Bulk Email), `composables/useSingleEmail.ts`, `stores/pendingCheck.ts`, `api/emails.ts`, `views/VerifyEmailsView.vue`, `views/SingleEmailView.vue`; `ReviewReport` got a `context` prop. Specs in decision 0007. Checked: lint, type-check, 119 unit tests, build; in the browser against a real API on a scratch schema: Verify with a real file (1 valid, 7 problems), Continue handed the file over with exactly one parse request in total and New Bulk Email opened with it loaded; Single Email validation errors, confirmation, a real email delivered to Mailpit with the right subject, recipient, sender and body, banner cleared on edit, and a refused send (dead SMTP port) showing the failure and keeping the text. Scratch schema dropped.
+- **Next (needs the user's go-ahead):** Phase 5 (Dashboard page) with previews first; then Phase 7 (Failures, needs a backend endpoint). Still pending: the user's list of responsive issues, and the decision 0011 reminder.
+- **Blocked on / waiting for the user:** (1) go-ahead for Phase 5; the list of responsive issues is still pending.
 - **Updated:** 2026-11-01
 
 ## Why
@@ -70,7 +70,7 @@ Everything below was built and verified, then removed on 2026-10-29 at the user'
 - [x] Phase 3: New Bulk Email page (one-page layout)
 - [x] Phase 4: Settings with SMTP test email (tabs)
 - [ ] Phase 5: Overview
-- [ ] Phase 6: Verify Emails and Single Email
+- [x] Phase 6: Verify Emails and Single Email
 - [ ] Phase 7: Failures page (needs the backend Failures endpoint)
 
 ## Open questions

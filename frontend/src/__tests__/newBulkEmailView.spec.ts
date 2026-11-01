@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { VueQueryPlugin } from '@tanstack/vue-query'
+import { createPinia } from 'pinia'
 import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -58,7 +59,9 @@ async function mountPage() {
   await router.isReady()
   const wrapper = mount(NewBulkEmailView, {
     attachTo: document.body,
-    global: { plugins: [router, [VueQueryPlugin, { queryClient }], PrimeVue, ToastService] },
+    global: {
+      plugins: [router, createPinia(), [VueQueryPlugin, { queryClient }], PrimeVue, ToastService],
+    },
   })
   await flushPromises()
   return { wrapper, router }

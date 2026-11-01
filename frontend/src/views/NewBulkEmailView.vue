@@ -14,7 +14,9 @@ import SendBar from '@/components/wizard/SendBar.vue'
 import WizardSection from '@/components/wizard/WizardSection.vue'
 import { useBulkEmailDraft } from '@/composables/useBulkEmailDraft'
 import { formatNumber } from '@/lib/format'
+import { summarizeCheck } from '@/lib/problems'
 import { fillTemplate } from '@/lib/template'
+import { usePendingCheckStore } from '@/stores/pendingCheck'
 
 const router = useRouter()
 const toast = useToast()
@@ -22,17 +24,12 @@ const draft = useBulkEmailDraft()
 
 const confirmOpen = shallowRef(false)
 
+// Arriving from Verify Emails with a file that is already checked: start from it.
+const pending = usePendingCheckStore().take()
+if (pending) draft.adopt(pending.file, pending.result)
+
 const uploadError = computed(() => draft.fileError.value || draft.parseError.value)
-const summary = computed(() => {
-  const r = draft.result.value
-  if (!r) return ''
-  const rows = r.valid.length + r.problems.length
-  const valid = draft.validCount.value
-  const skipped = draft.skippedCount.value
-  const ready = valid === 1 ? '1 is ready to send' : `${formatNumber(valid)} are ready to send`
-  const left = skipped === 1 ? '1 will be skipped' : `${formatNumber(skipped)} will be skipped`
-  return `${formatNumber(rows)} ${rows === 1 ? 'row' : 'rows'} checked. ${ready}, ${left}.`
-})
+const summary = computed(() => (draft.result.value ? summarizeCheck(draft.result.value) : ''))
 
 const current = computed(() => draft.samples.value[draft.previewIndex.value])
 const previewSubject = computed(() =>

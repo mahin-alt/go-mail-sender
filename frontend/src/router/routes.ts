@@ -45,14 +45,14 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/single-email',
     name: 'single-email',
-    component: Placeholder,
-    meta: { title: 'Single Email', icon: Send, phase: 6 },
+    component: () => import('@/views/SingleEmailView.vue'),
+    meta: { title: 'Single Email', icon: Send },
   },
   {
     path: '/verify-emails',
     name: 'verify-emails',
-    component: Placeholder,
-    meta: { title: 'Verify Emails', icon: MailCheck, phase: 6 },
+    component: () => import('@/views/VerifyEmailsView.vue'),
+    meta: { title: 'Verify Emails', icon: MailCheck },
   },
   {
     path: '/failures',

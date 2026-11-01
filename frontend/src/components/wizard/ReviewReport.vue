@@ -6,7 +6,9 @@ import StatusTabs, { type TabOption } from '@/components/ui/StatusTabs.vue'
 import { problemKind, type ProblemKind } from '@/lib/problems'
 import type { ParseResult, RowProblem } from '@/types/api'
 
-const props = defineProps<{ result: ParseResult }>()
+const props = withDefaults(defineProps<{ result: ParseResult; context?: 'send' | 'verify' }>(), {
+  context: 'send',
+})
 
 type Tab = 'all' | ProblemKind | 'unverified'
 const tab = shallowRef<Tab>('all')
@@ -60,15 +62,23 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
       class="bg-bad/10 text-bad-ink rounded-inner my-3.5 px-4 py-3.5 text-sm"
       role="alert"
     >
-      <b>No valid emails in this file.</b> Fix the problems below and upload it again.
+      <b>No valid emails in this file.</b>
+      Fix the problems below and {{ context === 'send' ? 'upload it again' : 'check it again' }}.
     </p>
     <p
       v-else-if="skipped > 0"
       class="bg-attn text-attn-ink rounded-inner my-3.5 px-4 py-3.5 text-sm leading-relaxed"
     >
-      <b>{{ skipped }} {{ skipped === 1 ? 'row' : 'rows' }} will be skipped.</b>
-      You can send to the {{ valid }} valid {{ valid === 1 ? 'email' : 'emails' }} now, or remove
-      the file and upload a corrected one.
+      <template v-if="context === 'send'">
+        <b>{{ skipped }} {{ skipped === 1 ? 'row' : 'rows' }} will be skipped.</b>
+        You can send to the {{ valid }} valid {{ valid === 1 ? 'email' : 'emails' }} now, or remove
+        the file and upload a corrected one.
+      </template>
+      <template v-else>
+        <b>{{ skipped }} {{ skipped === 1 ? 'row has a problem' : 'rows have problems' }}.</b>
+        {{ skipped === 1 ? 'It would be' : 'They would be' }} skipped if you used this file. Fix
+        {{ skipped === 1 ? 'it' : 'them' }} in the spreadsheet and check it again.
+      </template>
     </p>
     <p v-else class="bg-ok/10 text-ok-ink rounded-inner my-3.5 px-4 py-3.5 text-sm">
       <b>Every row is valid.</b>

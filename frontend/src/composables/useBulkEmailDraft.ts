@@ -1,38 +1,27 @@
 import { computed, shallowRef } from 'vue'
 import { useMutation } from '@tanstack/vue-query'
 
-import { createBatch, parseRecipients, type NewBulkEmail } from '@/api/recipients'
+import { createBatch, type NewBulkEmail } from '@/api/recipients'
 import { DEFAULT_BODY, DEFAULT_SUBJECT, unknownFields } from '@/lib/template'
-
-export const MAX_FILE_BYTES = 10 * 1024 * 1024
+import type { ParseResult } from '@/types/api'
+import { useRecipientCheck } from './useRecipientCheck'
 
 /** How many valid recipients the preview can flip through. */
 const PREVIEW_SAMPLE = 5
-
-/** Problems with the file itself, found before asking the server. */
-export function fileProblem(file: Pick<File, 'name' | 'size'>): string {
-  if (!/\.xlsx$/i.test(file.name)) return 'Only .xlsx files are supported.'
-  if (file.size > MAX_FILE_BYTES) return 'The file is too large. The limit is 10 MB.'
-  return ''
-}
 
 /**
  * State of the New Bulk Email page: the chosen file, what the server found in it, and the message.
  * Nothing is saved or sent until `send()` is called.
  */
 export function useBulkEmailDraft() {
-  const file = shallowRef<File | null>(null)
-  const fileError = shallowRef('')
+  const check = useRecipientCheck()
+  const { file, fileError, result, checking, parseError } = check
   const subject = shallowRef(DEFAULT_SUBJECT)
   const body = shallowRef(DEFAULT_BODY)
   const previewIndex = shallowRef(0)
 
-  const parse = useMutation({ mutationFn: (chosen: File) => parseRecipients(chosen) })
   const create = useMutation({ mutationFn: (input: NewBulkEmail) => createBatch(input) })
 
-  const result = computed(() => parse.data.value ?? null)
-  const checking = computed(() => parse.isPending.value)
-  const parseError = computed(() => parse.error.value?.message ?? '')
   const validCount = computed(() => result.value?.valid.length ?? 0)
   const skippedCount = computed(() => result.value?.problems.length ?? 0)
   const unverifiedCount = computed(() => result.value?.unverified_count ?? 0)
@@ -52,24 +41,19 @@ export function useBulkEmailDraft() {
   const canSend = computed(() => blocker.value === '')
 
   function chooseFile(next: File) {
-    const problem = fileProblem(next)
-    parse.reset()
     previewIndex.value = 0
-    if (problem) {
-      fileError.value = problem
-      file.value = null
-      return
-    }
-    fileError.value = ''
-    file.value = next
-    parse.mutate(next)
+    check.chooseFile(next)
   }
 
   function clearFile() {
-    file.value = null
-    fileError.value = ''
     previewIndex.value = 0
-    parse.reset()
+    check.clearFile()
+  }
+
+  /** Start from a file that Verify Emails already checked. */
+  function adopt(checkedFile: File, checked: ParseResult) {
+    previewIndex.value = 0
+    check.adopt(checkedFile, checked)
   }
 
   function step(direction: 1 | -1) {
@@ -103,6 +87,7 @@ export function useBulkEmailDraft() {
     sending: computed(() => create.isPending.value),
     chooseFile,
     clearFile,
+    adopt,
     step,
     send,
   }
