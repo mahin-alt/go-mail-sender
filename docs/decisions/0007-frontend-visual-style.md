@@ -104,5 +104,14 @@ Reference: `frontend/design-previews/c-verify-single.html`.
 - **Behaviour:** confirmation dialog before sending ("Send this email now? It will be sent to X immediately. This cannot be undone."); **no** "send to myself" shortcut; after sending, a green **Email sent** banner ("Sent to X. Send another") with the form left filled, and the banner disappears when the form is edited; "Send another" empties the form. A failed send shows a red alert (server message, plus "Check the SMTP settings and the server log." for a 502) and always says nothing was sent; the text is kept.
 - The backend returns only the generic message "failed to send email" for a mail-server failure (the reason is in the server log only), so the page cannot show the real SMTP reason.
 
+## Dashboard page (Phase 5, decided 2026-11-02)
+Reference: `frontend/design-previews/c-dashboard.html`. The user chose **layout A (classic)**, **side-by-side bars**, **4 tiles**, the **7/14/30 days switch on**, **header buttons off**, **5 recent rows**.
+- Header: title and "Monday 2 November · <time zone>" (no buttons).
+- **Four tiles:** *Sent today* (black), *Failed today* (red number), *In the queue* (pending + processing, caption "N sending now · N retrying" or "nothing waiting"), *Active Bulk Emails* (batches not finished, "nothing sending" when none). From `GET /stats`.
+- Row of two tiles: the **Last N days** chart (8 of 12 columns) and **Needs attention** (4 of 12, attention colours; each item has the filename, the reason in words ("12 failed emails", "42% of rows were invalid") and a black **Review** button to the Bulk Email; when empty it turns soft green with "Nothing needs attention").
+- Chart: **Chart.js through vue-chartjs** (already in the stack, loaded on demand so other pages do not pay for it): two bars per day, Sent (green) and Failed (red), side by side, day-of-month on the x axis, tooltip with the full day and both numbers, no built-in legend (a small HTML legend sits in the tile header). A segmented **7 / 14 / 30 days** control and a **Show as table** button (the accessible alternative with the same numbers, newest day first). The canvas has a text summary for screen readers. Empty: "No emails sent in the last N days" with a New Bulk Email button.
+- **Recent Bulk Emails:** the latest 5, using the same table as the Bulk Emails list, with a "View all" link; empty: "No Bulk Emails yet" with a button.
+- The page sends the browser's time zone (`tz`) so "today" is the user's today, and refreshes every 5 seconds. The API has no "yesterday" figure, so no "vs yesterday" is shown.
+
 ## Still open
 Dark mode (none for the MVP).

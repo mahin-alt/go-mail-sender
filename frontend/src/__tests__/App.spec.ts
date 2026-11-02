@@ -10,6 +10,11 @@ import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
 
 vi.mock('@/api/health', () => ({ getHealth: () => Promise.resolve({ status: 'ok' }) }))
+// The Dashboard is the landing page; keep it from calling the network.
+vi.mock('@/api/stats', () => ({
+  getStats: () => new Promise(() => {}),
+}))
+vi.mock('@/api/batches', () => ({ listBatches: () => new Promise(() => {}) }))
 
 async function mountAt(path: string) {
   const router = createRouter({ history: createMemoryHistory(), routes })
@@ -33,7 +38,7 @@ describe('App shell', () => {
     expect(router.currentRoute.value.name).toBe('dashboard')
   })
 
-  it('lists the six menu items in order, ungrouped', async () => {
+  it('lists the five menu items in order, ungrouped (Failures is hidden for now)', async () => {
     const { wrapper } = await mountAt('/dashboard')
     const labels = wrapper
       .findAll('nav[aria-label="Main"] a')
@@ -43,9 +48,14 @@ describe('App shell', () => {
       'Bulk Emails',
       'Single Email',
       'Verify Emails',
-      'Failures',
       'Settings',
     ])
+  })
+
+  it('keeps the hidden Failures page reachable by its address', async () => {
+    const { wrapper } = await mountAt('/failures')
+    expect(wrapper.find('h1').text()).toBe('Failures')
+    expect(wrapper.find('nav[aria-label="Main"]').text()).not.toContain('Failures')
   })
 
   it('marks the current page', async () => {

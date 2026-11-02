@@ -6,9 +6,10 @@
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done (2026-11-01):** **Phase 6 built, verified, committed and merged into `main`**: **Verify Emails** (stacked layout, same report as New Bulk Email in "verify" wording, "Check another file", and "Continue to New Bulk Email" which hands the checked file over through a small Pinia store so it is not uploaded twice) and **Single Email** (mail-window layout, sender shown in the header, confirmation before sending, success banner with "Send another", clear error state). New: `composables/useRecipientCheck.ts` (shared by Verify and New Bulk Email), `composables/useSingleEmail.ts`, `stores/pendingCheck.ts`, `api/emails.ts`, `views/VerifyEmailsView.vue`, `views/SingleEmailView.vue`; `ReviewReport` got a `context` prop. Specs in decision 0007. Checked: lint, type-check, 119 unit tests, build; in the browser against a real API on a scratch schema: Verify with a real file (1 valid, 7 problems), Continue handed the file over with exactly one parse request in total and New Bulk Email opened with it loaded; Single Email validation errors, confirmation, a real email delivered to Mailpit with the right subject, recipient, sender and body, banner cleared on edit, and a refused send (dead SMTP port) showing the failure and keeping the text. Scratch schema dropped.
-- **Next (needs the user's go-ahead):** Phase 5 (Dashboard page) with previews first; then Phase 7 (Failures, needs a backend endpoint). Still pending: the user's list of responsive issues, and the decision 0011 reminder.
-- **Blocked on / waiting for the user:** (1) go-ahead for Phase 5; the list of responsive issues is still pending.
+- **Last done (2026-11-02):** **Phase 5 built, verified, committed and merged into `main`**: the Dashboard page in the user's chosen layout (classic, side-by-side bars, 4 tiles, 7/14/30 day switch, no header buttons, 5 recent rows) with a "Show as table" alternative, a calm "nothing needs attention" state and a brand-new-install state. New: `api/stats.ts`, `queries/useStats.ts`, `lib/dashboard.ts`, `lib/chartColors.ts`, `components/ui/SegmentedControl.vue`, `components/dashboard/*` (chart loaded on demand), `views/DashboardView.vue`. Spec in decision 0007. Checked: lint, type-check, 132 unit tests, build (Chart.js is its own 153 kB chunk); in the browser against a real API on a scratch schema with sample files sent through a dead and a working SMTP: real tiles (8 sent, 8 failed), real chart with the time zone sent, needs-attention list with real reasons (failed emails, high invalid rate), recent list, range switch 7/14/30, table view, live update (uploading a batch raised "Sent today" from 8 to 13 with no reload), and the 375px layout without sideways scroll. Scratch schema dropped.
+- **Failures is hidden from the sidebar for now** (user's request, 2026-11-02): its route still exists as a placeholder; to show it again add `icon: TriangleAlert` to the route's `meta` in `frontend/src/router/routes.ts` (and the test list in `App.spec.ts`).
+- **Next (needs the user's go-ahead):** Phase 7 (Failures page; needs a backend endpoint for failed emails across all Bulk Emails, grouped by reason, plus recovery of emails stuck in "processing"). Still pending: the user's list of responsive issues, and the decision 0011 reminder.
+- **Blocked on / waiting for the user:** (1) go-ahead for Phase 7; the list of responsive issues is still pending.
 - **Updated:** 2026-11-01
 
 ## Why
@@ -69,7 +70,7 @@ Everything below was built and verified, then removed on 2026-10-29 at the user'
 - [x] Phase 2: Bulk Emails list and detail (polling, Retry)
 - [x] Phase 3: New Bulk Email page (one-page layout)
 - [x] Phase 4: Settings with SMTP test email (tabs)
-- [ ] Phase 5: Overview
+- [x] Phase 5: Dashboard
 - [x] Phase 6: Verify Emails and Single Email
 - [ ] Phase 7: Failures page (needs the backend Failures endpoint)
 

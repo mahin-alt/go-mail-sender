@@ -4,6 +4,7 @@ import type { BatchListParams, JobListParams } from '@/api/batches'
 export const queryKeys = {
   health: ['health'] as const,
   settings: ['settings'] as const,
+  stats: (days: number, tz: string) => ['stats', days, tz] as const,
   batches: {
     all: ['batches'] as const,
     list: (params: BatchListParams) => ['batches', 'list', params] as const,

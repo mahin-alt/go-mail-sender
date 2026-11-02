@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 import type { RouteRecordRaw } from 'vue-router'
-import { LayoutGrid, Mail, MailCheck, Send, Settings, TriangleAlert } from '@lucide/vue'
+import { LayoutGrid, Mail, MailCheck, Send, Settings } from '@lucide/vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -21,8 +21,8 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/dashboard',
     name: 'dashboard',
-    component: Placeholder,
-    meta: { title: 'Dashboard', icon: LayoutGrid, phase: 5 },
+    component: () => import('@/views/DashboardView.vue'),
+    meta: { title: 'Dashboard', icon: LayoutGrid },
   },
   {
     path: '/bulk-emails',
@@ -58,7 +58,8 @@ export const routes: RouteRecordRaw[] = [
     path: '/failures',
     name: 'failures',
     component: Placeholder,
-    meta: { title: 'Failures', icon: TriangleAlert, phase: 7 },
+    // Hidden from the sidebar for now (no `icon`). Give it `icon: TriangleAlert` to show it again.
+    meta: { title: 'Failures', phase: 7 },
   },
   {
     path: '/settings',
