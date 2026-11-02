@@ -1,4 +1,4 @@
-import type { ParseResult, RowProblem } from '@/types/api'
+import type { RowProblem } from '@/types/api'
 
 export type ProblemKind = 'invalid' | 'duplicate' | 'domain'
 
@@ -13,14 +13,22 @@ export function problemKind(problem: Pick<RowProblem, 'reason'>): ProblemKind {
   return 'invalid'
 }
 
-/** "312 rows checked. 296 are ready to send, 16 will be skipped." */
-export function summarizeCheck(result: ParseResult): string {
-  const valid = result.valid.length
-  const skipped = result.problems.length
-  const rows = valid + skipped
-  const ready =
-    valid === 1 ? '1 is ready to send' : `${valid.toLocaleString('en')} are ready to send`
-  const left =
-    skipped === 1 ? '1 will be skipped' : `${skipped.toLocaleString('en')} will be skipped`
-  return `${rows.toLocaleString('en')} ${rows === 1 ? 'row' : 'rows'} checked. ${ready}, ${left}.`
+/**
+ * The API's reasons name the email address (`invalid email "x@y"`), which is already in its own
+ * column, and give DNS detail. Show only the part that explains the problem.
+ */
+export function tidyReason(reason: string): string {
+  const text = reason.trim()
+  const lower = text.toLowerCase()
+  if (lower.startsWith('duplicate')) return 'duplicate email'
+  if (lower.startsWith('invalid email')) return 'invalid email'
+  if (lower.startsWith('could not verify domain')) return 'could not verify domain'
+  if (lower.startsWith('domain ')) return 'domain does not accept mail'
+  return text
+}
+
+/** The error text for an email: rows that were skipped as invalid get the short reason, delivery errors stay as the server gave them. */
+export function jobReason(job: { status: string; last_error?: string }): string {
+  const text = job.last_error ?? ''
+  return job.status === 'invalid' ? tidyReason(text) : text
 }

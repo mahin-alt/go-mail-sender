@@ -75,7 +75,7 @@ async function choose(wrapper: Awaited<ReturnType<typeof mountPage>>['wrapper'],
 }
 
 const sendButton = (w: Awaited<ReturnType<typeof mountPage>>['wrapper']) =>
-  w.findAll('button').find((b) => b.text().startsWith('Send to'))!
+  w.findAll('button').find((b) => b.text() === 'Send')!
 
 beforeEach(() => {
   queryClient.clear()
@@ -90,7 +90,6 @@ describe('New Bulk Email page', () => {
     const sections = wrapper.findAll('section')
     expect(sections[1]!.attributes('inert')).toBeDefined()
     expect(sections[2]!.attributes('inert')).toBeDefined()
-    expect(wrapper.text()).toContain('Upload a file to begin')
     expect(sendButton(wrapper).attributes('disabled')).toBeDefined()
   })
 
@@ -99,9 +98,11 @@ describe('New Bulk Email page', () => {
     const file = xlsx()
     await choose(wrapper, file)
     expect(api.parseRecipients).toHaveBeenCalledWith(file)
-    expect(wrapper.text()).toContain('5 rows checked. 2 are ready to send, 3 will be skipped.')
-    expect(wrapper.text()).toContain('3 rows will be skipped')
-    expect(wrapper.text()).toContain('2 will be sent · 3 skipped')
+    expect(wrapper.text()).toContain('Ready to send')
+    expect(wrapper.text()).toContain('Will be skipped')
+    expect(wrapper.text()).not.toContain('rows will be skipped')
+    expect(wrapper.text()).not.toContain('will be sent ·')
+    expect(sendButton(wrapper).attributes('disabled')).toBeUndefined()
     expect(wrapper.findAll('section')[1]!.attributes('inert')).toBeUndefined()
   })
 
@@ -235,6 +236,6 @@ describe('New Bulk Email page', () => {
       .click()
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('new-bulk-email')
-    expect(wrapper.text()).toContain('2 will be sent')
+    expect(wrapper.text()).toContain('orders.xlsx')
   })
 })

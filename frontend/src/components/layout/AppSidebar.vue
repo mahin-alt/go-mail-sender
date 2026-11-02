@@ -33,7 +33,21 @@ const items = useNavItems()
     @focusin="emit('focusin', $event)"
     @focusout="emit('focusout', $event)"
   >
-    <BrandLogo :show-wordmark="expanded" />
+    <div class="flex items-center justify-between gap-1 nav:gap-2">
+      <BrandLogo :show-wordmark="expanded" />
+      <!-- Icon only, beside the logo. In the narrow rail it stays hidden until the sidebar opens (hover or keyboard focus). -->
+      <button
+        type="button"
+        class="rounded-inner text-muted hidden size-9 shrink-0 cursor-pointer place-items-center transition-opacity duration-150 hover:bg-hover hover:text-ink motion-reduce:transition-none nav:grid"
+        :class="expanded ? 'opacity-100' : 'pointer-events-none opacity-0'"
+        :aria-expanded="pinned"
+        :aria-label="pinned ? 'Collapse sidebar' : 'Keep sidebar open'"
+        :title="pinned ? 'Collapse sidebar' : 'Keep sidebar open'"
+        @click="emit('toggle')"
+      >
+        <component :is="pinned ? ChevronsLeft : ChevronsRight" class="size-5" aria-hidden="true" />
+      </button>
+    </div>
 
     <nav class="flex gap-1 nav:flex-col nav:gap-1.5" aria-label="Main">
       <RouterLink
@@ -61,26 +75,8 @@ const items = useNavItems()
       </RouterLink>
     </nav>
 
-    <div class="hidden flex-col gap-1.5 nav:mt-auto nav:flex">
+    <div class="hidden flex-col nav:mt-auto nav:flex">
       <ApiStatus :show-label="expanded" />
-      <button
-        type="button"
-        class="rounded-inner bg-note text-muted flex h-12 w-full cursor-pointer items-center gap-3.5 px-[0.9375rem] text-sm font-medium whitespace-nowrap hover:bg-track hover:text-ink"
-        :aria-expanded="pinned"
-        :aria-label="pinned ? 'Collapse sidebar' : 'Keep sidebar open'"
-        @click="emit('toggle')"
-      >
-        <component
-          :is="pinned ? ChevronsLeft : ChevronsRight"
-          class="size-5 shrink-0"
-          aria-hidden="true"
-        />
-        <span
-          class="transition-opacity duration-150 motion-reduce:transition-none"
-          :class="expanded ? 'opacity-100' : 'opacity-0'"
-          >{{ pinned ? 'Collapse sidebar' : 'Keep sidebar open' }}</span
-        >
-      </button>
     </div>
   </aside>
 </template>

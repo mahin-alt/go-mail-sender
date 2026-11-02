@@ -3,6 +3,7 @@ import { RotateCw } from '@lucide/vue'
 
 import StatusBadge from '@/components/status/StatusBadge.vue'
 import { exactTime, timeAgo } from '@/lib/format'
+import { jobReason } from '@/lib/problems'
 import type { Job } from '@/types/api'
 
 defineProps<{ jobs: Job[]; retryingId?: number | null }>()
@@ -56,9 +57,7 @@ function onRow(job: Job, event: MouseEvent) {
           <td class="px-2.5 py-3 text-right tabular-nums">{{ job.attempts }}</td>
           <td class="text-bad-ink text-user max-w-64 px-2.5 py-3 text-[0.8125rem]">
             <!-- A sent email keeps the error of its earlier failed attempt; it is history, not a problem. -->
-            <span v-if="job.status !== 'sent'" class="line-clamp-2">{{
-              job.last_error || ''
-            }}</span>
+            <span v-if="job.status !== 'sent'" class="line-clamp-2">{{ jobReason(job) }}</span>
           </td>
           <td class="text-muted px-2.5 py-3 text-[0.8125rem]" :title="exactTime(job.updated_at)">
             {{ timeAgo(job.updated_at) }}

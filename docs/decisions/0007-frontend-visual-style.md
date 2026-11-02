@@ -113,5 +113,20 @@ Reference: `frontend/design-previews/c-dashboard.html`. The user chose **layout 
 - **Recent Bulk Emails:** the latest 5, using the same table as the Bulk Emails list, with a "View all" link; empty: "No Bulk Emails yet" with a button.
 - The page sends the browser's time zone (`tz`) so "today" is the user's today, and refreshes every 5 seconds. The API has no "yesterday" figure, so no "vs yesterday" is shown.
 
+## Less on-screen text (2026-11-02)
+The user found the UI too wordy. **Rule going forward: no explanatory sentences on a page unless a user could otherwise get stuck; section explanations that were explicitly kept stay.** The wordy version is kept on the branch **`snapshot/verbose-ui-text`** (the state of `main` at commit `48cfb83`); see "Restoring the old text" below.
+- **Page headers:** no description under the page title on any page (Bulk Emails, New Bulk Email, Settings, Verify Emails, Single Email). Kept: the Dashboard's date and time zone, the batch page's "Batch #N · N emails", and the placeholder's "Built in Phase N".
+- **Settings:** the "no login yet" banner is gone (the policy reminder lives in [0011](0011-settings-editing-policy.md)). Each setting row shows only its name (the old description is a tooltip on the name) and the control; the tags (Applies instantly, Needs a restart, From environment, Changed here) are gone; "Reset to default" remains and appears only for a changed setting. **Kept:** the one-line explanation under each tab's title, the test-email hint, and the "Saved. Restart the server to apply." notice.
+- **New Bulk Email / Verify Emails:** no card explanations, no "N rows checked… will be skipped" line under the file, no "rows will be skipped. You can send…" notice (the tiles show the counts). Kept: the drop-zone hint ("First sheet, with a header row…"), "No valid emails in this file." and "Every row is valid.".
+- **Send button (New Bulk Email):** only a **Send** button, a white pill (`#FFFFFF`, text `#161616`) inside a small black capsule (`#161616`), pinned at the bottom right. No "N will be sent · N skipped" text. Its accessible name still says "Send to N recipients", and the reason it is off is in the tooltip and in text for screen readers. The confirmation dialog still names the number.
+- **Skip reasons:** shown without the email address (it has its own column): `invalid email`, `duplicate email`, `domain does not accept mail` (any bad domain), `could not verify domain` (no DNS detail); "email is empty" and "name is empty" unchanged. Applies to the review table and to skipped emails on the batch page. Delivery errors keep the server's full text.
+- **Single Email:** the footer sentence is gone. A **From** row (read-only, muted, the sender address from the settings) sits above **To**, so the window looks like a real mail form; the "from X" in the black bar is gone. The row is hidden if the address cannot be loaded.
+- **Sidebar:** the collapse / keep-open control is an **icon only (double chevron) at the right of the logo**, at the top, instead of a labelled button at the bottom. In the collapsed rail it is hidden until the sidebar opens (hover or keyboard focus), because the 70px rail has no room beside the logo.
+
+### Restoring the old text
+- Look at it: `git switch snapshot/verbose-ui-text` (then `git switch -` to come back).
+- Compare: `git diff snapshot/verbose-ui-text refactor/trim-ui-text -- frontend/src`.
+- Bring back one file: `git checkout snapshot/verbose-ui-text -- frontend/src/views/SettingsView.vue` (then fix its tests).
+
 ## Still open
 Dark mode (none for the MVP).

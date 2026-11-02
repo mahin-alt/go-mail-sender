@@ -14,7 +14,6 @@ import SendBar from '@/components/wizard/SendBar.vue'
 import WizardSection from '@/components/wizard/WizardSection.vue'
 import { useBulkEmailDraft } from '@/composables/useBulkEmailDraft'
 import { formatNumber } from '@/lib/format'
-import { summarizeCheck } from '@/lib/problems'
 import { fillTemplate } from '@/lib/template'
 import { usePendingCheckStore } from '@/stores/pendingCheck'
 
@@ -29,8 +28,6 @@ const pending = usePendingCheckStore().take()
 if (pending) draft.adopt(pending.file, pending.result)
 
 const uploadError = computed(() => draft.fileError.value || draft.parseError.value)
-const summary = computed(() => (draft.result.value ? summarizeCheck(draft.result.value) : ''))
-
 const current = computed(() => draft.samples.value[draft.previewIndex.value])
 const previewSubject = computed(() =>
   current.value ? fillTemplate(draft.subject.value, current.value) : draft.subject.value,
@@ -68,43 +65,25 @@ async function confirmSend() {
 </script>
 
 <template>
-  <PageHeader
-    title="New Bulk Email"
-    subtitle="Upload, review, write, send. Nothing is sent until you confirm."
-  />
+  <PageHeader title="New Bulk Email" />
 
   <div class="flex flex-col gap-3.5">
-    <WizardSection
-      :number="1"
-      title="Upload your spreadsheet"
-      subtitle="We check the file first. Nothing is sent or saved until you confirm at the end."
-    >
+    <WizardSection :number="1" title="Upload your spreadsheet">
       <FileUpload
         :file="draft.file.value"
         :checking="draft.checking.value"
         :error="uploadError"
-        :summary="summary"
         @choose="draft.chooseFile"
         @clear="draft.clearFile"
       />
     </WizardSection>
 
-    <WizardSection
-      :number="2"
-      title="Review the file"
-      subtitle="What will happen when you send. Fix the file and upload it again if something looks wrong."
-      :locked="!draft.ready.value"
-    >
+    <WizardSection :number="2" title="Review the file" :locked="!draft.ready.value">
       <ReviewReport v-if="draft.result.value" :result="draft.result.value" />
-      <p v-else class="text-muted text-sm">Upload a file first to see how many rows are valid.</p>
+      <p v-else class="text-muted text-sm">Upload a file first.</p>
     </WizardSection>
 
-    <WizardSection
-      :number="3"
-      title="Write your message"
-      subtitle="Prefilled with a starting message. Edit it, then check the preview."
-      :locked="!draft.ready.value"
-    >
+    <WizardSection :number="3" title="Write your message" :locked="!draft.ready.value">
       <div class="grid grid-cols-1 gap-5 nav:grid-cols-[1.1fr_1fr]">
         <MessageEditor
           v-model:subject="draft.subject.value"
@@ -125,9 +104,7 @@ async function confirmSend() {
   </div>
 
   <SendBar
-    :ready="draft.ready.value"
     :valid="draft.validCount.value"
-    :skipped="draft.skippedCount.value"
     :blocker="draft.blocker.value"
     @send="confirmOpen = true"
   />

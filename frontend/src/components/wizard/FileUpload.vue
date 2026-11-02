@@ -9,8 +9,6 @@ defineProps<{
   checking: boolean
   /** Problem with the file or the server's answer. */
   error: string
-  /** One line shown under a checked file, e.g. "312 rows checked". */
-  summary?: string
 }>()
 const emit = defineEmits<{ choose: [file: File]; clear: [] }>()
 
@@ -76,14 +74,6 @@ function size(bytes: number) {
       />
       Checking every row. Nothing is sent yet.
     </p>
-    <p
-      v-else-if="file && summary"
-      class="bg-ok/10 text-ok-ink rounded-inner mt-3.5 px-4 py-3.5 text-sm"
-      role="status"
-    >
-      {{ summary }}
-    </p>
-
     <div
       v-if="!file"
       class="rounded-tile bg-note border-2 border-dashed px-5 py-10 text-center"

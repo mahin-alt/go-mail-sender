@@ -94,15 +94,20 @@ describe('Single Email page', () => {
     const w = await mountPage()
     expect(w.find('h1').text()).toBe('Single Email')
     expect(w.text()).toContain('New message')
-    expect(w.text()).toContain('from noreply@shop.example')
-    expect(w.text()).toContain('sent immediately')
+    const from = w.find('#single-from')
+    expect((from.element as HTMLInputElement).value).toBe('noreply@shop.example')
+    expect(from.attributes('readonly')).toBeDefined()
+    expect(w.text()).not.toContain('sent immediately')
+    expect(w.text()).not.toContain('only work in Bulk Emails')
+    const order = w.findAll('input').map((i) => i.attributes('id'))
+    expect(order.indexOf('single-from')).toBeLessThan(order.indexOf('single-to')) // From sits above To
   })
 
   it('still works when the sender address cannot be loaded', async () => {
     api.getSettings.mockRejectedValue(new ApiError('settings are not configured', 500, 'http'))
     const w = await mountPage()
     expect(w.text()).toContain('New message')
-    expect(w.text()).not.toContain('from ')
+    expect(w.find('#single-from').exists()).toBe(false)
   })
 
   it('has no "send to myself" shortcut', async () => {

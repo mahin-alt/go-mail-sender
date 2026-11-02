@@ -63,21 +63,24 @@ beforeEach(() => {
 })
 
 describe('Verify Emails page', () => {
-  it('starts with only the upload card, and says nothing is sent', async () => {
+  it('starts with only the upload card and no explanatory text', async () => {
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     expect(wrapper.find('h1').text()).toBe('Verify Emails')
-    expect(wrapper.text()).toContain('Nothing is sent or saved')
+    expect(wrapper.text()).not.toContain('Nothing is sent or saved')
+    expect(wrapper.text()).not.toContain('We check every row')
+    expect(wrapper.text()).toContain('First sheet, with a header row') // the drop-zone hint stays
     expect(wrapper.text()).not.toContain('Result')
   })
 
-  it('checks the file and shows the result in "verify" wording, with no Send button', async () => {
+  it('checks the file and shows the result without any Send button or long notices', async () => {
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     const file = xlsx()
     await choose(wrapper, file)
     expect(api.parseRecipients).toHaveBeenCalledWith(file)
-    expect(wrapper.text()).toContain('3 rows checked. 2 are ready to send, 1 will be skipped.')
-    expect(wrapper.text()).toContain('1 row has a problem')
-    expect(wrapper.text()).toContain('It would be skipped if you used this file')
+    expect(wrapper.text()).toContain('Ready to send')
+    expect(wrapper.text()).toContain('Will be skipped')
+    expect(wrapper.text()).not.toContain('rows checked')
+    expect(wrapper.text()).not.toContain('would be skipped if you used this file')
     expect(wrapper.text()).not.toContain('will be sent')
     expect(wrapper.findAll('button').some((b) => b.text().startsWith('Send to'))).toBe(false)
     expect(api.createBatch).not.toHaveBeenCalled()
@@ -94,7 +97,7 @@ describe('Verify Emails page', () => {
     api.parseRecipients.mockResolvedValue(parsed({ valid: [] }))
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx())
-    expect(wrapper.text()).toContain('check it again')
+    expect(wrapper.text()).toContain('No valid emails in this file')
     expect(button(wrapper, 'Continue to New Bulk Email').attributes('disabled')).toBeDefined()
   })
 
@@ -136,8 +139,9 @@ describe('Verify Emails page', () => {
     })
     await flushPromises()
     expect(next.text()).toContain('customers.xlsx')
-    expect(next.text()).toContain('3 rows checked. 2 are ready to send, 1 will be skipped.')
-    expect(next.text()).toContain('2 will be sent · 1 skipped')
+    expect(next.text()).toContain('Ready to send')
+    const send = next.findAll('button').find((b) => b.text() === 'Send')!
+    expect(send.attributes('disabled')).toBeUndefined() // the handed-over file is ready to send
     expect(api.parseRecipients).toHaveBeenCalledTimes(1) // not uploaded and checked a second time
     expect(usePendingCheckStore().take()).toBeNull() // and it is only handed over once
   })

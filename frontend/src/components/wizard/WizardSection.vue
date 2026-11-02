@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ number: number; title: string; subtitle: string; locked?: boolean }>()
+defineProps<{ number: number; title: string; subtitle?: string; locked?: boolean }>()
 </script>
 
 <template>
@@ -13,7 +13,8 @@ defineProps<{ number: number; title: string; subtitle: string; locked?: boolean 
   >
     <h2
       :id="`section-${number}`"
-      class="mb-1 flex items-center gap-2.5 text-lg font-bold tracking-tight"
+      class="flex items-center gap-2.5 text-lg font-bold tracking-tight"
+      :class="subtitle ? 'mb-1' : 'mb-4.5'"
     >
       <span
         class="bg-ink grid size-7 shrink-0 place-items-center rounded-full text-[0.8125rem] text-white"
@@ -22,7 +23,7 @@ defineProps<{ number: number; title: string; subtitle: string; locked?: boolean 
       >
       {{ title }}
     </h2>
-    <p class="text-muted mb-4.5 text-sm">{{ subtitle }}</p>
+    <p v-if="subtitle" class="text-muted mb-4.5 text-sm">{{ subtitle }}</p>
     <slot />
   </section>
 </template>

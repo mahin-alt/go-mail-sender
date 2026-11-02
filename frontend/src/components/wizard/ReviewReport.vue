@@ -3,12 +3,10 @@ import { computed, shallowRef } from 'vue'
 
 import KpiTile from '@/components/ui/KpiTile.vue'
 import StatusTabs, { type TabOption } from '@/components/ui/StatusTabs.vue'
-import { problemKind, type ProblemKind } from '@/lib/problems'
+import { problemKind, tidyReason, type ProblemKind } from '@/lib/problems'
 import type { ParseResult, RowProblem } from '@/types/api'
 
-const props = withDefaults(defineProps<{ result: ParseResult; context?: 'send' | 'verify' }>(), {
-  context: 'send',
-})
+const props = defineProps<{ result: ParseResult }>()
 
 type Tab = 'all' | ProblemKind | 'unverified'
 const tab = shallowRef<Tab>('all')
@@ -63,26 +61,14 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
       role="alert"
     >
       <b>No valid emails in this file.</b>
-      Fix the problems below and {{ context === 'send' ? 'upload it again' : 'check it again' }}.
     </p>
     <p
-      v-else-if="skipped > 0"
-      class="bg-attn text-attn-ink rounded-inner my-3.5 px-4 py-3.5 text-sm leading-relaxed"
+      v-else-if="skipped === 0"
+      class="bg-ok/10 text-ok-ink rounded-inner my-3.5 px-4 py-3.5 text-sm"
     >
-      <template v-if="context === 'send'">
-        <b>{{ skipped }} {{ skipped === 1 ? 'row' : 'rows' }} will be skipped.</b>
-        You can send to the {{ valid }} valid {{ valid === 1 ? 'email' : 'emails' }} now, or remove
-        the file and upload a corrected one.
-      </template>
-      <template v-else>
-        <b>{{ skipped }} {{ skipped === 1 ? 'row has a problem' : 'rows have problems' }}.</b>
-        {{ skipped === 1 ? 'It would be' : 'They would be' }} skipped if you used this file. Fix
-        {{ skipped === 1 ? 'it' : 'them' }} in the spreadsheet and check it again.
-      </template>
-    </p>
-    <p v-else class="bg-ok/10 text-ok-ink rounded-inner my-3.5 px-4 py-3.5 text-sm">
       <b>Every row is valid.</b>
     </p>
+    <div v-else class="h-3.5" />
 
     <template v-if="skipped > 0 || unverified.length > 0">
       <StatusTabs v-model="tab" class="mb-2.5" label="Show problems" :tabs="tabs" />
@@ -102,7 +88,7 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
               <td class="text-user px-2.5 py-2.5 font-semibold">{{ row.name || '(empty)' }}</td>
               <td class="px-2.5 py-2.5 break-all">{{ row.email || '(empty)' }}</td>
               <td class="text-user px-2.5 py-2.5 text-[0.8125rem]" :class="rowTone">
-                {{ row.reason }}
+                {{ tidyReason(row.reason) }}
               </td>
             </tr>
             <tr v-if="rows.length === 0">

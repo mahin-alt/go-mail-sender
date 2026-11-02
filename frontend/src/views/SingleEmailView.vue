@@ -33,10 +33,7 @@ const err = 'text-bad-ink px-5.5 py-1.5 text-[0.8125rem]'
 </script>
 
 <template>
-  <PageHeader
-    title="Single Email"
-    subtitle="Send one email right now. It is sent immediately, not queued."
-  />
+  <PageHeader title="Single Email" />
 
   <div class="max-w-3xl">
     <p
@@ -63,7 +60,18 @@ const err = 'text-bad-ink px-5.5 py-1.5 text-[0.8125rem]'
         class="bg-ink flex items-center justify-between px-5.5 py-3 text-sm font-semibold text-white"
       >
         <span>New message</span>
-        <span v-if="from" class="font-medium text-white/70">from {{ from }}</span>
+      </div>
+
+      <div v-if="from" :class="line">
+        <label for="single-from" :class="label">From</label>
+        <input
+          id="single-from"
+          :value="from"
+          type="text"
+          readonly
+          aria-readonly="true"
+          :class="[bare, 'text-muted cursor-default']"
+        />
       </div>
 
       <div :class="line">
@@ -140,10 +148,7 @@ const err = 'text-bad-ink px-5.5 py-1.5 text-[0.8125rem]'
       <div
         class="border-hairline flex flex-wrap items-center justify-between gap-2.5 border-t px-5.5 py-3.5"
       >
-        <span class="text-muted text-[0.8125rem]"
-          >Plain text · sent immediately · fields like
-          <code class="font-mono">{{ '{' + '{.Name}' + '}' }}</code> only work in Bulk Emails</span
-        >
+        <span />
         <AppButton type="submit" :loading="email.sending.value">{{
           email.sending.value ? 'Sending…' : 'Send email'
         }}</AppButton>

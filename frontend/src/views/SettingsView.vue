@@ -115,15 +115,7 @@ const saveLabel = (group: SettingsGroup) =>
 </script>
 
 <template>
-  <PageHeader title="Settings" subtitle="Sender, SMTP and sending behaviour" />
-
-  <p
-    class="bg-attn text-attn-ink rounded-inner mb-3.5 px-4 py-3.5 text-sm leading-relaxed"
-    role="note"
-  >
-    <b>There is no login yet.</b> Anyone who can reach this API can change where email is sent from
-    and the SMTP password. Keep it on a private network until sign-in exists.
-  </p>
+  <PageHeader title="Settings" />
 
   <p v-if="settings.isPending.value" class="text-muted py-10 text-sm" role="status">
     Loading settings…

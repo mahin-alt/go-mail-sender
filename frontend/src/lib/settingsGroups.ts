@@ -57,12 +57,6 @@ export function groupsFor(items: readonly SettingItem[]): SettingsGroup[] {
   return extra.length ? [...SETTINGS_GROUPS, { ...OTHER, keys: extra }] : [...SETTINGS_GROUPS]
 }
 
-/** The API reports `restart_required` only for settings that apply on restart. */
-export function describeApply(item: SettingItem): string {
-  if (!item.editable) return 'Read-only'
-  return item.apply === 'restart' ? 'Needs a restart' : 'Applies instantly'
-}
-
 /**
  * A rejected save names the setting it is about at the start of the message
  * ("SMTP_PORT must be a whole number…"), so the message can sit under that field.

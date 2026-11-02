@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 
 import SecretField from '@/components/settings/SecretField.vue'
-import { describeApply } from '@/lib/settingsGroups'
 import type { SettingItem } from '@/types/api'
 
 const props = defineProps<{
@@ -38,22 +37,10 @@ const box =
     <div>
       <label
         :for="inputId"
+        :title="item.description"
         class="mb-0.5 block font-mono text-[0.8125rem] font-semibold break-all"
         >{{ item.key }}</label
       >
-      <p class="text-muted text-[0.8125rem] leading-snug">{{ item.description }}</p>
-      <div class="mt-2 flex flex-wrap gap-1.5 text-[0.6875rem] font-semibold">
-        <span
-          class="rounded-full px-2.5 py-0.5"
-          :class="item.apply === 'restart' ? 'bg-attn text-attn-ink' : 'bg-pill'"
-          >{{ describeApply(item) }}</span
-        >
-        <span
-          class="rounded-full px-2.5 py-0.5"
-          :class="item.source === 'override' ? 'bg-ok/10 text-ok-ink' : 'bg-pill'"
-          >{{ item.source === 'override' ? 'Changed here' : 'From environment' }}</span
-        >
-      </div>
       <button
         v-if="canReset"
         type="button"

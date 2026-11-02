@@ -7,7 +7,6 @@ import AppButton from '@/components/ui/AppButton.vue'
 import FileUpload from '@/components/wizard/FileUpload.vue'
 import ReviewReport from '@/components/wizard/ReviewReport.vue'
 import { useRecipientCheck } from '@/composables/useRecipientCheck'
-import { summarizeCheck } from '@/lib/problems'
 import { usePendingCheckStore } from '@/stores/pendingCheck'
 
 const router = useRouter()
@@ -15,7 +14,6 @@ const pending = usePendingCheckStore()
 const check = useRecipientCheck()
 
 const uploadError = computed(() => check.fileError.value || check.parseError.value)
-const summary = computed(() => (check.result.value ? summarizeCheck(check.result.value) : ''))
 const canContinue = computed(() => (check.result.value?.valid.length ?? 0) > 0)
 
 /** Carry the checked file over so New Bulk Email starts from it instead of asking for it again. */
@@ -28,22 +26,17 @@ function continueToBulkEmail() {
 </script>
 
 <template>
-  <PageHeader
-    title="Verify Emails"
-    subtitle="Check a spreadsheet before you use it. Nothing is sent or saved."
-  />
+  <PageHeader title="Verify Emails" />
 
   <div class="flex flex-col gap-3.5">
     <section class="rounded-tile bg-tile p-6.5" aria-labelledby="verify-upload">
-      <h2 id="verify-upload" class="mb-1 text-lg font-bold tracking-tight">
+      <h2 id="verify-upload" class="mb-4.5 text-lg font-bold tracking-tight">
         Upload your spreadsheet
       </h2>
-      <p class="text-muted mb-4.5 text-sm">We check every row and tell you what is wrong.</p>
       <FileUpload
         :file="check.file.value"
         :checking="check.checking.value"
         :error="uploadError"
-        :summary="summary"
         @choose="check.chooseFile"
         @clear="check.clearFile"
       />
@@ -54,16 +47,8 @@ function continueToBulkEmail() {
       class="rounded-tile bg-tile p-6.5"
       aria-labelledby="verify-result"
     >
-      <h2 id="verify-result" class="mb-1 text-lg font-bold tracking-tight">Result</h2>
-      <p class="text-muted mb-4.5 text-sm">
-        {{
-          (check.result.value.valid.length + check.result.value.problems.length).toLocaleString(
-            'en',
-          )
-        }}
-        rows checked.
-      </p>
-      <ReviewReport :result="check.result.value" context="verify" />
+      <h2 id="verify-result" class="mb-4.5 text-lg font-bold tracking-tight">Result</h2>
+      <ReviewReport :result="check.result.value" />
 
       <div class="border-hairline mt-4 flex flex-wrap items-center gap-2.5 border-t pt-4">
         <AppButton variant="secondary" @click="check.clearFile">Check another file</AppButton>

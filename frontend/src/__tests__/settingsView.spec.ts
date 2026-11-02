@@ -96,7 +96,7 @@ beforeEach(() => {
 })
 
 describe('Settings page', () => {
-  it('has four tabs and starts on Sender and SMTP, with the no-login warning', async () => {
+  it('has four tabs and starts on Sender and SMTP, without the long no-login warning', async () => {
     const w = await mountPage()
     expect(w.findAll('[role="tab"]').map((t) => t.text())).toEqual([
       'Sender and SMTP',
@@ -105,14 +105,16 @@ describe('Settings page', () => {
       'Read-only',
     ])
     expect(tab(w, 'Sender').attributes('aria-selected')).toBe('true')
-    expect(w.text()).toContain('There is no login yet')
+    expect(w.text()).not.toContain('There is no login yet')
+    expect(w.text()).toContain('Where email is sent from') // each tab keeps its one-line explanation
   })
 
-  it('shows each setting with how it applies and where its value comes from', async () => {
+  it('shows the setting names without descriptions or tags, and keeps Reset to default', async () => {
     const w = await mountPage()
-    expect(w.text()).toContain('Applies instantly')
-    expect(w.text()).toContain('Changed here')
-    expect(w.text()).toContain('From environment')
+    expect(w.text()).not.toContain('Applies instantly')
+    expect(w.text()).not.toContain('Changed here')
+    expect(w.text()).not.toContain('From environment')
+    expect(w.find('label[for="setting-MAIL_FROM"]').attributes('title')).toBe('d') // description is only a tooltip
     expect(w.text()).toContain('Reset to default')
   })
 
@@ -245,7 +247,7 @@ describe('Settings page', () => {
     const w = await mountPage()
     await tab(w, 'Server').trigger('click')
     expect(w.text()).toContain('Restart the server to apply')
-    expect(w.text()).toContain('Needs a restart')
+    expect(w.text()).not.toContain('Needs a restart')
   })
 
   it('has no Save buttons on the Read-only tab and the boxes cannot be edited', async () => {

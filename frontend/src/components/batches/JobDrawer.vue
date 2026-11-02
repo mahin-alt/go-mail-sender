@@ -5,6 +5,7 @@ import Drawer from 'primevue/drawer'
 
 import StatusBadge from '@/components/status/StatusBadge.vue'
 import { exactTime } from '@/lib/format'
+import { jobReason } from '@/lib/problems'
 import type { Job } from '@/types/api'
 
 defineProps<{ job: Job | null; retrying?: boolean }>()
@@ -48,7 +49,7 @@ const pt = {
         class="bg-attn text-attn-ink rounded-inner text-user px-3.5 py-3 text-[0.84rem]"
       >
         <b class="block">Last error</b>
-        {{ job.last_error }}
+        {{ jobReason(job) }}
       </div>
 
       <dl class="grid grid-cols-2 gap-3.5 text-sm">

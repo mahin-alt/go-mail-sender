@@ -36,7 +36,7 @@ const filtered = computed(() => status.value !== '' || q.value !== '')
 </script>
 
 <template>
-  <PageHeader title="Bulk Emails" subtitle="Every file you have uploaded">
+  <PageHeader title="Bulk Emails">
     <template #actions>
       <RouterLink
         :to="{ name: 'new-bulk-email' }"
