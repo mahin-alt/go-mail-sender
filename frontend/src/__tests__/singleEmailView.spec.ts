@@ -110,6 +110,13 @@ describe('Single Email page', () => {
     expect(w.find('#single-from').exists()).toBe(false)
   })
 
+  it('has a plain "Send" button in the mail window', async () => {
+    const w = await mountPage()
+    const submit = w.find('button[type="submit"]')
+    expect(submit.text()).toBe('Send')
+    expect(w.findAll('button').some((b) => b.text() === 'Send email')).toBe(false)
+  })
+
   it('has no "send to myself" shortcut', async () => {
     const w = await mountPage()
     expect(w.text()).not.toContain('myself')

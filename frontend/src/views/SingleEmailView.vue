@@ -150,7 +150,7 @@ const err = 'text-bad-ink px-5.5 py-1.5 text-[0.8125rem]'
       >
         <span />
         <AppButton type="submit" :loading="email.sending.value">{{
-          email.sending.value ? 'Sending…' : 'Send email'
+          email.sending.value ? 'Sending…' : 'Send'
         }}</AppButton>
       </div>
     </form>

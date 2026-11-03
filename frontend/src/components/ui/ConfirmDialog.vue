@@ -1,23 +1,42 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 
-defineProps<{ title: string; message: string; confirmLabel: string; busy?: boolean }>()
+const props = defineProps<{
+  title: string
+  message: string
+  confirmLabel: string
+  busy?: boolean
+  /** Centre the title and the message, with more room before the buttons. */
+  centered?: boolean
+}>()
 const visible = defineModel<boolean>('visible', { required: true })
 const emit = defineEmits<{ confirm: [] }>()
 
-const pt = {
+const pt = computed(() => ({
   root: { class: 'rounded-tile bg-tile border-0 w-[min(26rem,calc(100vw-1.75rem))]' },
-  header: { class: 'px-6 pt-6 pb-2' },
-  title: { class: 'text-lg font-bold tracking-tight' },
-  content: { class: 'px-6 pb-2' },
+  header: { class: props.centered ? 'justify-center px-6 pt-7 pb-2' : 'px-6 pt-6 pb-2' },
+  title: {
+    class: props.centered
+      ? 'text-lg font-bold tracking-tight text-center'
+      : 'text-lg font-bold tracking-tight',
+  },
+  content: { class: props.centered ? 'px-6 pb-7' : 'px-6 pb-2' },
   footer: { class: 'px-6 pb-6' },
-}
+}))
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" modal :closable="false" :header="title" :pt="pt">
-    <p class="text-muted text-sm">{{ message }}</p>
+  <Dialog
+    v-model:visible="visible"
+    modal
+    :closable="false"
+    :draggable="false"
+    :header="title"
+    :pt="pt"
+  >
+    <p class="text-muted text-sm" :class="centered && 'text-center'">{{ message }}</p>
     <template #footer>
       <Button
         rounded

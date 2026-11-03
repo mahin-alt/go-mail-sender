@@ -9,7 +9,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import JobsTable from '@/components/batches/JobsTable.vue'
 import ReviewReport from '@/components/wizard/ReviewReport.vue'
-import SendBar from '@/components/wizard/SendBar.vue'
+import SendButton from '@/components/wizard/SendButton.vue'
 import { jobReason, tidyReason } from '@/lib/problems'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
@@ -116,13 +116,19 @@ describe('jobs table', () => {
 })
 
 describe('send button', () => {
-  it('is just a "Send" button on a black capsule, and says why it is off to assistive tech', () => {
-    const w = mount(SendBar, { props: { valid: 296, blocker: '' } })
+  it('is just a "Send" button in the same style as Save, not stuck to the screen, with the reason it is off for assistive tech', () => {
+    const w = mount(SendButton, { props: { valid: 296, blocker: '' } })
     expect(w.text()).toBe('Send')
     expect(w.find('button').attributes('aria-label')).toBe('Send to 296 recipients')
-    expect(w.find('.bg-ink').exists()).toBe(true)
-    expect(w.find('button').classes()).toContain('bg-white')
-    const off = mount(SendBar, { props: { valid: 0, blocker: 'Write a subject' } })
+    expect(w.find('button').classes()).toEqual(
+      expect.arrayContaining(['bg-ink', 'text-white', 'rounded-full']),
+    )
+    expect(w.find('button').classes()).toEqual(
+      expect.arrayContaining(['px-6', 'py-3', 'text-base']), // slightly bigger than Save
+    )
+    expect(w.html()).not.toContain('sticky')
+    expect(w.html()).not.toContain('fixed')
+    const off = mount(SendButton, { props: { valid: 0, blocker: 'Write a subject' } })
     expect(off.find('button').attributes('disabled')).toBeDefined()
     expect(off.find('[role="status"]').text()).toBe('Write a subject')
     expect(off.find('[role="status"]').classes()).toContain('sr-only')

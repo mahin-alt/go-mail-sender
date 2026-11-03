@@ -107,11 +107,6 @@ const connection = computed(() => {
     ...(password.mode === 'remove' ? { password: '' } : {}),
   }
 })
-
-const saveLabel = (group: SettingsGroup) =>
-  group.id === 'smtp' && form.dirtyKeys(group.keys).some((k) => k !== 'MAIL_FROM')
-    ? 'Test connection and save'
-    : 'Save changes'
 </script>
 
 <template>
@@ -198,7 +193,7 @@ const saveLabel = (group: SettingsGroup) =>
           :disabled="form.dirtyKeys(active.keys).length === 0"
           @click="save(active)"
         >
-          {{ saveLabel(active) }}
+          Save
         </AppButton>
       </div>
     </section>

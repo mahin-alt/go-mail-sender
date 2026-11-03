@@ -208,9 +208,14 @@ describe('New Bulk Email page', () => {
     await sendButton(wrapper).trigger('click')
     await flushPromises()
     expect(api.createBatch).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('Send to 2 recipients?')
-    const confirm = [...document.body.querySelectorAll('button')].find(
-      (b) => b.textContent?.trim() === 'Send 2 emails',
+    const dialog = document.body.querySelector('.p-dialog')!
+    expect(dialog.querySelector('.p-dialog-title')!.textContent).toBe('Confirm')
+    expect(dialog.textContent).toContain(
+      '2 valid recipients will receive emails. 3 invalid entries will be excluded from sending.',
+    )
+    expect(dialog.textContent).not.toContain('This cannot be undone')
+    const confirm = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Send',
     )!
     confirm.click()
     await flushPromises()
@@ -223,6 +228,55 @@ describe('New Bulk Email page', () => {
     expect(router.currentRoute.value.params.id).toBe('45')
   })
 
+  it('centres the title, leaves room before the buttons, and has just Cancel and Send', async () => {
+    const { wrapper } = await mountPage()
+    await choose(wrapper, xlsx())
+    await sendButton(wrapper).trigger('click')
+    await flushPromises()
+    const dialog = document.body.querySelector('.p-dialog')!
+    expect(dialog.querySelector('.p-dialog-header')!.classList.contains('justify-center')).toBe(
+      true,
+    )
+    expect(dialog.querySelector('.p-dialog-title')!.classList.contains('text-center')).toBe(true)
+    expect(dialog.querySelector('.p-dialog-content')!.classList.contains('pb-7')).toBe(true)
+    expect(dialog.querySelector('.p-dialog-content p')!.classList.contains('text-center')).toBe(
+      true,
+    )
+    expect([...dialog.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual([
+      'Cancel',
+      'Send',
+    ])
+  })
+
+  it('leaves out the invalid-entries sentence when nothing is skipped, and uses the singular for one', async () => {
+    api.parseRecipients.mockResolvedValue(
+      parsed({
+        valid: [{ name: 'Aisha', email: 'aisha@shop.example', row: 2 }],
+        problems: [],
+        unverified_count: 0,
+        unverified: [],
+      }),
+    )
+    const { wrapper } = await mountPage()
+    await choose(wrapper, xlsx())
+    await sendButton(wrapper).trigger('click')
+    await flushPromises()
+    const text = document.body.querySelector('.p-dialog-content')!.textContent
+    expect(text).toBe('1 valid recipient will receive emails.')
+  })
+
+  it('sends nothing when the confirmation is cancelled', async () => {
+    const { wrapper } = await mountPage()
+    await choose(wrapper, xlsx())
+    await sendButton(wrapper).trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll<HTMLButtonElement>('.p-dialog button')]
+      .find((b) => b.textContent?.trim() === 'Cancel')!
+      .click()
+    await flushPromises()
+    expect(api.createBatch).not.toHaveBeenCalled()
+  })
+
   it('stays on the page and keeps everything when sending fails', async () => {
     api.createBatch.mockRejectedValue(
       new ApiError('invalid body template: unexpected }', 400, 'http'),
@@ -231,8 +285,8 @@ describe('New Bulk Email page', () => {
     await choose(wrapper, xlsx())
     await sendButton(wrapper).trigger('click')
     await flushPromises()
-    ;[...document.body.querySelectorAll('button')]
-      .find((b) => b.textContent?.trim() === 'Send 2 emails')!
+    ;[...document.body.querySelectorAll<HTMLButtonElement>('.p-dialog button')]
+      .find((b) => b.textContent?.trim() === 'Send')!
       .click()
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('new-bulk-email')

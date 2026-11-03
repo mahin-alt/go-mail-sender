@@ -128,12 +128,27 @@ describe('Settings page', () => {
 
   it('starts with Save and Discard off, and turns them on after an edit with a dot on the tab', async () => {
     const w = await mountPage()
-    expect(button(w, 'Save changes').attributes('disabled')).toBeDefined()
+    expect(button(w, 'Save').attributes('disabled')).toBeDefined()
     await w.find('#setting-SMTP_PORT').setValue('2525')
-    expect(button(w, 'Test connection and save').attributes('disabled')).toBeUndefined()
+    expect(button(w, 'Save').attributes('disabled')).toBeUndefined()
     expect(tab(w, 'Sender').text()).toContain('unsaved changes')
     await button(w, 'Discard').trigger('click')
     expect((w.find('#setting-SMTP_PORT').element as HTMLInputElement).value).toBe('587')
+  })
+
+  it('calls the save button just "Save" on every tab, even when the SMTP settings are being changed', async () => {
+    const w = await mountPage()
+    await w.find('#setting-SMTP_PORT').setValue('2525')
+    const save = w.findAll('button').filter((b) => b.text().startsWith('Save'))
+    expect(save.map((b) => b.text())).toEqual(['Save'])
+    expect(w.text()).not.toContain('Test connection')
+    await tab(w, 'Sending').trigger('click')
+    expect(
+      w
+        .findAll('button')
+        .filter((b) => b.text().startsWith('Save'))
+        .map((b) => b.text()),
+    ).toEqual(['Save'])
   })
 
   it('keeps edits when you switch tabs', async () => {
@@ -148,7 +163,7 @@ describe('Settings page', () => {
     api.updateSettings.mockResolvedValue(make())
     const w = await mountPage()
     await w.find('#setting-SMTP_PORT').setValue('2525')
-    await button(w, 'Test connection and save').trigger('click')
+    await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(api.updateSettings).toHaveBeenCalledWith({ values: { SMTP_PORT: '2525' } })
   })
@@ -158,7 +173,7 @@ describe('Settings page', () => {
     const w = await mountPage()
     await button(w, 'Change password').trigger('click')
     await w.find('input[type="password"]').setValue('s3cret')
-    await button(w, 'Test connection and save').trigger('click')
+    await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(api.updateSettings).toHaveBeenCalledWith({ values: { SMTP_PASSWORD: 's3cret' } })
   })
@@ -168,7 +183,7 @@ describe('Settings page', () => {
     const w = await mountPage()
     await button(w, 'Remove').trigger('click')
     expect(w.text()).toContain('The password will be removed')
-    await button(w, 'Test connection and save').trigger('click')
+    await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(api.updateSettings).toHaveBeenCalledWith({ values: { SMTP_PASSWORD: '' } })
   })
@@ -178,7 +193,7 @@ describe('Settings page', () => {
     const w = await mountPage()
     await tab(w, 'Sending').trigger('click')
     await w.find('#setting-DOMAIN_CHECK_ENABLED').trigger('click')
-    await button(w, 'Save changes').trigger('click')
+    await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(api.updateSettings).toHaveBeenCalledWith({ values: { DOMAIN_CHECK_ENABLED: 'false' } })
   })
@@ -189,7 +204,7 @@ describe('Settings page', () => {
     )
     const w = await mountPage()
     await w.find('#setting-SMTP_PORT').setValue('99999')
-    await button(w, 'Test connection and save').trigger('click')
+    await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(w.find('#setting-SMTP_PORT-error').text()).toContain('between 1 and 65535')
     expect((w.find('#setting-SMTP_PORT').element as HTMLInputElement).value).toBe('99999')
@@ -201,7 +216,7 @@ describe('Settings page', () => {
     )
     const w = await mountPage()
     await w.find('#setting-SMTP_HOST').setValue('nope.example')
-    await button(w, 'Test connection and save').trigger('click')
+    await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(w.find('[role="tabpanel"] [role="alert"]').text()).toContain('connection refused')
     expect(tab(w, 'Sender').text()).toContain('unsaved changes')

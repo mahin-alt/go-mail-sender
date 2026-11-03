@@ -10,7 +10,7 @@ import EmailPreview from '@/components/wizard/EmailPreview.vue'
 import FileUpload from '@/components/wizard/FileUpload.vue'
 import MessageEditor from '@/components/wizard/MessageEditor.vue'
 import ReviewReport from '@/components/wizard/ReviewReport.vue'
-import SendBar from '@/components/wizard/SendBar.vue'
+import SendButton from '@/components/wizard/SendButton.vue'
 import WizardSection from '@/components/wizard/WizardSection.vue'
 import { useBulkEmailDraft } from '@/composables/useBulkEmailDraft'
 import { formatNumber } from '@/lib/format'
@@ -38,6 +38,15 @@ const previewBody = computed(() =>
 const previewTo = computed(() =>
   current.value ? `${current.value.name} <${current.value.email}>` : '',
 )
+
+/** "296 valid recipients will receive emails. 16 invalid entries will be excluded from sending." */
+const confirmMessage = computed(() => {
+  const sent = draft.validCount.value
+  const skipped = draft.skippedCount.value
+  const receive = `${formatNumber(sent)} valid ${sent === 1 ? 'recipient' : 'recipients'} will receive emails.`
+  if (skipped === 0) return receive
+  return `${receive} ${formatNumber(skipped)} invalid ${skipped === 1 ? 'entry' : 'entries'} will be excluded from sending.`
+})
 
 async function confirmSend() {
   try {
@@ -103,7 +112,7 @@ async function confirmSend() {
     </WizardSection>
   </div>
 
-  <SendBar
+  <SendButton
     :valid="draft.validCount.value"
     :blocker="draft.blocker.value"
     @send="confirmOpen = true"
@@ -111,9 +120,10 @@ async function confirmSend() {
 
   <ConfirmDialog
     v-model:visible="confirmOpen"
-    :title="`Send to ${formatNumber(draft.validCount.value)} ${draft.validCount.value === 1 ? 'recipient' : 'recipients'}?`"
-    :message="`Each valid row will get the email${draft.skippedCount.value ? `, and ${formatNumber(draft.skippedCount.value)} skipped ${draft.skippedCount.value === 1 ? 'row is' : 'rows are'} left out` : ''}. This cannot be undone.`"
-    :confirm-label="`Send ${formatNumber(draft.validCount.value)} ${draft.validCount.value === 1 ? 'email' : 'emails'}`"
+    centered
+    title="Confirm"
+    :message="confirmMessage"
+    confirm-label="Send"
     :busy="draft.sending.value"
     @confirm="confirmSend"
   />
