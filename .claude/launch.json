@@ -12,6 +12,18 @@
       "runtimeExecutable": "go",
       "runtimeArgs": ["run", "./cmd/server"],
       "port": 8080
+    },
+    {
+      "name": "api-scratch",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "set -a && . ./.env && set +a && DATABASE_URL=\"$DATABASE_URL&search_path=scratch_ui_test\" HTTP_ADDR=:8091 CORS_ALLOWED_ORIGINS=http://localhost:5174 exec go run ./cmd/server"],
+      "port": 8091
+    },
+    {
+      "name": "frontend-scratch",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd frontend && VITE_API_BASE=http://localhost:8091 exec npm run dev -- --port 5174 --strictPort"],
+      "port": 5174
     }
   ]
 }
