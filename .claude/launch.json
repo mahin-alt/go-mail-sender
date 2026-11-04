@@ -16,7 +16,7 @@
     {
       "name": "api-scratch",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "set -a && . ./.env && set +a && DATABASE_URL=\"$DATABASE_URL&search_path=scratch_ui_test\" HTTP_ADDR=:8091 CORS_ALLOWED_ORIGINS=http://localhost:5174 exec go run ./cmd/server"],
+      "runtimeArgs": ["-c", "set -a && . ./.env && set +a && DATABASE_URL=\"$DATABASE_URL&search_path=scratch_ui_test\" HTTP_ADDR=:8091 CORS_ALLOWED_ORIGINS=http://localhost:5174 LOG_LEVEL=debug LOG_FILE=logs/scratch.log exec go run ./cmd/server"],
       "port": 8091
     },
     {
