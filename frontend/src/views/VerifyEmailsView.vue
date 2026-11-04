@@ -37,6 +37,7 @@ function continueToBulkEmail() {
         :file="check.file.value"
         :checking="check.checking.value"
         :error="uploadError"
+        :max-mb="check.maxUploadMb.value"
         @choose="check.chooseFile"
         @clear="check.clearFile"
       />

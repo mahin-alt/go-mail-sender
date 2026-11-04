@@ -9,6 +9,8 @@ defineProps<{
   checking: boolean
   /** Problem with the file or the server's answer. */
   error: string
+  /** Largest accepted file, from the MAX_UPLOAD_MB setting. */
+  maxMb: number
 }>()
 const emit = defineEmits<{ choose: [file: File]; clear: [] }>()
 
@@ -84,7 +86,7 @@ function size(bytes: number) {
     >
       <b class="mb-1.5 block text-base">Drop your .xlsx file here</b>
       <p class="text-muted mb-4 text-sm">
-        First sheet, with a header row that has Name and Email. Up to 10 MB.
+        First sheet, with a header row that has Name and Email. Up to {{ maxMb }} MB.
       </p>
       <button
         type="button"

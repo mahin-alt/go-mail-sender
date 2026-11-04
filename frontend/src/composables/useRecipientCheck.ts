@@ -2,14 +2,14 @@ import { computed, shallowRef } from 'vue'
 import { useMutation } from '@tanstack/vue-query'
 
 import { parseRecipients } from '@/api/recipients'
+import { uploadLimitMb } from '@/lib/uploadLimit'
+import { useSettings } from '@/queries/useSettings'
 import type { ParseResult } from '@/types/api'
 
-export const MAX_FILE_BYTES = 10 * 1024 * 1024
-
 /** Problems with the file itself, found before asking the server. */
-export function fileProblem(file: Pick<File, 'name' | 'size'>): string {
+export function fileProblem(file: Pick<File, 'name' | 'size'>, maxMb: number): string {
   if (!/\.xlsx$/i.test(file.name)) return 'Only .xlsx files are supported.'
-  if (file.size > MAX_FILE_BYTES) return 'The file is too large. The limit is 10 MB.'
+  if (file.size > maxMb * 1024 * 1024) return `The file is too large. The limit is ${maxMb} MB.`
   return ''
 }
 
@@ -23,6 +23,9 @@ export function useRecipientCheck() {
   const fileError = shallowRef('')
   const result = shallowRef<ParseResult | null>(null)
   const parse = useMutation({ mutationFn: (chosen: File) => parseRecipients(chosen) })
+  // MAX_UPLOAD_MB is changed on the Settings page without a restart; re-read whenever a page using this opens.
+  const settings = useSettings()
+  const maxUploadMb = computed(() => uploadLimitMb(settings.data.value))
 
   const checking = computed(() => parse.isPending.value)
   const parseError = computed(() => parse.error.value?.message ?? '')
@@ -30,7 +33,7 @@ export function useRecipientCheck() {
   function chooseFile(next: File) {
     parse.reset()
     result.value = null
-    const problem = fileProblem(next)
+    const problem = fileProblem(next, maxUploadMb.value)
     if (problem) {
       fileError.value = problem
       file.value = null
@@ -60,5 +63,15 @@ export function useRecipientCheck() {
     result.value = checked
   }
 
-  return { file, fileError, result, checking, parseError, chooseFile, clearFile, adopt }
+  return {
+    file,
+    fileError,
+    result,
+    checking,
+    parseError,
+    maxUploadMb,
+    chooseFile,
+    clearFile,
+    adopt,
+  }
 }

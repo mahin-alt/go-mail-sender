@@ -91,6 +91,12 @@ var catalog = []def{
 		set:   func(c *config.Config, v string) { c.MaxJobRetries, _ = strconv.Atoi(v) },
 	},
 	{
+		key: "MAX_UPLOAD_MB", desc: "Largest spreadsheet that can be uploaded, in MB", kind: "int", apply: ApplyInstant,
+		parse: intRange("MAX_UPLOAD_MB", 1, config.MaxUploadMBLimit),
+		get:   func(c config.Config) string { return strconv.Itoa(c.MaxUploadMB) },
+		set:   func(c *config.Config, v string) { c.MaxUploadMB, _ = strconv.Atoi(v) },
+	},
+	{
 		key: "WORKER_COUNT", desc: "Background workers sending emails in parallel", kind: "int", apply: ApplyRestart,
 		parse: intRange("WORKER_COUNT", 1, 100),
 		get:   func(c config.Config) string { return strconv.Itoa(c.WorkerCount) },

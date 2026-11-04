@@ -10,7 +10,7 @@ import { ApiError } from '@/api/errors'
 import type { NewBulkEmail } from '@/api/recipients'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { CreateBatchResult, ParseResult } from '@/types/api'
+import type { CreateBatchResult, ParseResult, SettingItem } from '@/types/api'
 import NewBulkEmailView from '@/views/NewBulkEmailView.vue'
 
 const api = vi.hoisted(() => ({
@@ -18,6 +18,23 @@ const api = vi.hoisted(() => ({
   createBatch: vi.fn<(input: NewBulkEmail) => Promise<CreateBatchResult>>(),
 }))
 vi.mock('@/api/recipients', () => api)
+
+const settingsApi = vi.hoisted(() => ({
+  getSettings: vi.fn<() => Promise<SettingItem[]>>(),
+}))
+vi.mock('@/api/settings', () => settingsApi)
+const uploadLimit = (mb: number): SettingItem => ({
+  key: 'MAX_UPLOAD_MB',
+  description: '',
+  kind: 'int',
+  value: String(mb),
+  has_value: true,
+  source: 'override',
+  editable: true,
+  secret: false,
+  apply: 'instant',
+  restart_required: false,
+})
 
 const parsed = (over: Partial<ParseResult> = {}): ParseResult => ({
   valid: [
@@ -81,6 +98,8 @@ beforeEach(() => {
   queryClient.clear()
   Object.values(api).forEach((fn) => fn.mockReset())
   api.parseRecipients.mockResolvedValue(parsed())
+  settingsApi.getSettings.mockReset()
+  settingsApi.getSettings.mockResolvedValue([uploadLimit(10)])
   document.body.innerHTML = ''
 })
 
@@ -160,6 +179,19 @@ describe('New Bulk Email page', () => {
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx('big.xlsx', 10 * 1024 * 1024 + 1))
     expect(wrapper.find('[role="alert"]').text()).toContain('10 MB')
+  })
+
+  it('uses the upload limit from Settings', async () => {
+    settingsApi.getSettings.mockResolvedValue([uploadLimit(40)])
+    const { wrapper } = await mountPage()
+    expect(wrapper.text()).toContain('Up to 40 MB.')
+
+    const big = xlsx('big.xlsx', 18 * 1024 * 1024)
+    await choose(wrapper, big)
+    expect(api.parseRecipients).toHaveBeenCalledWith(big)
+
+    await choose(wrapper, xlsx('huge.xlsx', 40 * 1024 * 1024 + 1))
+    expect(wrapper.find('[role="alert"]').text()).toBe('The file is too large. The limit is 40 MB.')
   })
 
   it("shows the server's message when the file cannot be read", async () => {

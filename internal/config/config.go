@@ -68,6 +68,10 @@ type Config struct {
 	// before being permanently marked as failed.
 	MaxJobRetries int
 
+	// MaxUploadMB is the largest spreadsheet (in MB) the upload endpoints accept.
+	// Parsing holds the whole sheet in memory, so it is capped at MaxUploadMBLimit.
+	MaxUploadMB int
+
 	// DomainCheckEnabled turns on the DNS/MX check of recipient domains when
 	// recipients are parsed. Rows whose domain cannot receive mail are rejected.
 	DomainCheckEnabled bool
@@ -86,6 +90,13 @@ type Config struct {
 	// Without it, secrets cannot be edited from the dashboard.
 	SettingsEncryptionKey string
 }
+
+// Upload size bounds, in MB. Parsing needs roughly 13x the file size in memory,
+// so the ceiling keeps one upload from exhausting the server.
+const (
+	DefaultMaxUploadMB = 10
+	MaxUploadMBLimit   = 50
+)
 
 // Load reads configuration from a .env file (if present) and the process
 // environment.
@@ -109,6 +120,11 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("SMTP_TLS_MODE %q is invalid: use auto, none, starttls or tls", tlsMode)
 	}
 
+	maxUploadMB := getEnvInt("MAX_UPLOAD_MB", DefaultMaxUploadMB)
+	if maxUploadMB > MaxUploadMBLimit {
+		return Config{}, fmt.Errorf("MAX_UPLOAD_MB %d is too large: the limit is %d", maxUploadMB, MaxUploadMBLimit)
+	}
+
 	return Config{
 		DatabaseURL:  getEnv("DATABASE_URL", "postgres://localhost:5432/sendmail?sslmode=disable"),
 		SMTPHost:     smtpHost,
@@ -127,6 +143,7 @@ func Load() (Config, error) {
 		SMTPPoolSize:    getEnvInt("SMTP_POOL_SIZE", 3),
 		JobPollInterval: getEnvDuration("JOB_POLL_INTERVAL", 500*time.Millisecond),
 		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
+		MaxUploadMB:     maxUploadMB,
 
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
 

@@ -105,6 +105,11 @@ func TestParsers(t *testing.T) {
 		{"JOB_POLL_INTERVAL", "1s", "1s", true},
 		{"JOB_POLL_INTERVAL", "1ms", "", false},
 		{"JOB_POLL_INTERVAL", "soon", "", false},
+		{"MAX_UPLOAD_MB", "40", "40", true},
+		{"MAX_UPLOAD_MB", " 50 ", "50", true},
+		{"MAX_UPLOAD_MB", "0", "", false},
+		{"MAX_UPLOAD_MB", "51", "", false},
+		{"MAX_UPLOAD_MB", "12.5", "", false},
 	}
 	for _, c := range cases {
 		d, ok := findDef(c.key)

@@ -8,6 +8,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 |---|---|---|---|
 | Dashboard: backend APIs | done | [features/dashboard.md](features/dashboard.md) | batch list, paged jobs, retry, stats, settings, STARTTLS, CORS, goose |
 | Dashboard: Vue frontend | in progress (Phases 1-6 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-new-bulk-email`; app shell, Bulk Emails and New Bulk Email done; next Phase 7 Failures |
+| Large spreadsheet uploads (1M+ rows) | in progress | [features/large-file-upload.md](features/large-file-upload.md) | branch `feat/upload-size-limit`; `MAX_UPLOAD_MB` setting done; next: smaller parse response, streaming parser |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |

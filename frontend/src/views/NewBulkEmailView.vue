@@ -82,6 +82,7 @@ async function confirmSend() {
         :file="draft.file.value"
         :checking="draft.checking.value"
         :error="uploadError"
+        :max-mb="draft.maxUploadMb.value"
         @choose="draft.chooseFile"
         @clear="draft.clearFile"
       />

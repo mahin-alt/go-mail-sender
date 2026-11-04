@@ -11,7 +11,7 @@ import type { NewBulkEmail } from '@/api/recipients'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
 import { usePendingCheckStore } from '@/stores/pendingCheck'
-import type { CreateBatchResult, ParseResult } from '@/types/api'
+import type { CreateBatchResult, ParseResult, SettingItem } from '@/types/api'
 import NewBulkEmailView from '@/views/NewBulkEmailView.vue'
 import VerifyEmailsView from '@/views/VerifyEmailsView.vue'
 
@@ -20,6 +20,23 @@ const api = vi.hoisted(() => ({
   createBatch: vi.fn<(input: NewBulkEmail) => Promise<CreateBatchResult>>(),
 }))
 vi.mock('@/api/recipients', () => api)
+
+const settingsApi = vi.hoisted(() => ({
+  getSettings: vi.fn<() => Promise<SettingItem[]>>(),
+}))
+vi.mock('@/api/settings', () => settingsApi)
+const uploadLimit = (mb: number): SettingItem => ({
+  key: 'MAX_UPLOAD_MB',
+  description: '',
+  kind: 'int',
+  value: String(mb),
+  has_value: true,
+  source: 'override',
+  editable: true,
+  secret: false,
+  apply: 'instant',
+  restart_required: false,
+})
 
 const parsed = (over: Partial<ParseResult> = {}): ParseResult => ({
   valid: [
@@ -59,6 +76,8 @@ beforeEach(() => {
   queryClient.clear()
   Object.values(api).forEach((fn) => fn.mockReset())
   api.parseRecipients.mockResolvedValue(parsed())
+  settingsApi.getSettings.mockReset()
+  settingsApi.getSettings.mockResolvedValue([uploadLimit(10)])
   document.body.innerHTML = ''
 })
 

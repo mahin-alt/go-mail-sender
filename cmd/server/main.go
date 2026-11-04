@@ -105,6 +105,7 @@ func main() {
 		smtpPool.Reconfigure(c)
 		st.SetMaxAttempts(c.MaxJobRetries)
 		handler.SetDomainCheckEnabled(c.DomainCheckEnabled)
+		handler.SetMaxUploadMB(c.MaxUploadMB)
 	})
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer loadCancel()
@@ -137,6 +138,7 @@ func main() {
 	// off at runtime; DOMAIN_CHECK_ENABLED only decides the starting state.
 	handler.WithDomainChecker(domaincheck.NewChecker(net.DefaultResolver))
 	handler.SetDomainCheckEnabled(cfg.DomainCheckEnabled)
+	handler.SetMaxUploadMB(cfg.MaxUploadMB)
 	handler.WithSettings(settingsSvc)
 	if cfg.DomainCheckEnabled {
 		log.Printf("recipient domain (DNS/MX) check enabled")

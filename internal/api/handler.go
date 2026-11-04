@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"sendmail/internal/config"
 	"sendmail/internal/domaincheck"
 	"sendmail/internal/mailer"
 	"sendmail/internal/recipients"
@@ -31,10 +33,15 @@ import (
 	"sendmail/internal/worker"
 )
 
-// Limits on request bodies to prevent resource exhaustion.
+// Limits on request bodies to prevent resource exhaustion. The upload limit
+// itself is a runtime setting (MAX_UPLOAD_MB), see SetMaxUploadMB.
 const (
-	maxBodyBytes   = 1 << 20  // 1 MB for JSON payloads
-	maxUploadBytes = 10 << 20 // 10 MB for file uploads
+	maxBodyBytes = 1 << 20 // 1 MB for JSON payloads
+
+	// formOverheadBytes is room for the multipart boundaries and the small
+	// text fields (subject, body) that travel with the file, so a file exactly
+	// at the limit is still accepted.
+	formOverheadBytes = 1 << 20
 )
 
 // Handler holds the dependencies our HTTP handlers need.
@@ -51,7 +58,56 @@ type Handler struct {
 	// the Settings page. Atomic because requests read it while Settings writes it.
 	domainsOn atomic.Bool
 
+	// maxUploadMB is the largest accepted spreadsheet, changed from the
+	// Settings page while requests are reading it, hence atomic.
+	maxUploadMB atomic.Int64
+
 	settings *settings.Service // nil = settings endpoints disabled
+}
+
+// SetMaxUploadMB changes the upload size limit at runtime. Uploads already in
+// progress keep the limit they started with. Values below 1 are ignored.
+func (h *Handler) SetMaxUploadMB(mb int) {
+	if mb > 0 {
+		h.maxUploadMB.Store(int64(mb))
+	}
+}
+
+// readUpload reads the multipart form and returns the .xlsx in field "file".
+// The size limit is read once, so a settings change mid-upload does not affect
+// it. On any problem it writes the error response and returns ok=false.
+func (h *Handler) readUpload(w http.ResponseWriter, r *http.Request) (multipart.File, *multipart.FileHeader, bool) {
+	limitMB := h.maxUploadMB.Load()
+	limit := limitMB << 20
+	tooLarge := fmt.Sprintf("file too large: the limit is %d MB", limitMB)
+
+	r.Body = http.MaxBytesReader(w, r.Body, limit+formOverheadBytes)
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, tooLarge)
+			return nil, nil, false
+		}
+		writeError(w, http.StatusBadRequest, "invalid multipart form: "+err.Error())
+		return nil, nil, false
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, `form field "file" is required`)
+		return nil, nil, false
+	}
+	if header.Size > limit {
+		file.Close()
+		writeError(w, http.StatusRequestEntityTooLarge, tooLarge)
+		return nil, nil, false
+	}
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
+		file.Close()
+		writeError(w, http.StatusBadRequest, "only .xlsx files are supported")
+		return nil, nil, false
+	}
+	return file, header, true
 }
 
 // DomainChecker reports whether an email domain can receive mail.
@@ -135,11 +191,13 @@ func mergeProblems(problems, rejected []recipients.RowError) []recipients.RowErr
 // NewHandler builds a Handler with all required dependencies.
 // store and worker can be nil in isolated tests that only test synchronous endpoints.
 func NewHandler(m mailer.Mailer, st *store.Store, wp *worker.Pool) *Handler {
-	return &Handler{
+	h := &Handler{
 		mailer: m,
 		store:  st,
 		worker: wp,
 	}
+	h.maxUploadMB.Store(config.DefaultMaxUploadMB)
+	return h
 }
 
 // sendEmailRequest is the JSON shape clients send to POST /api/v1/emails.
@@ -196,29 +254,11 @@ type parseRecipientsResponse struct {
 
 // ParseRecipients handles POST /api/v1/recipients/parse (preview parsed Excel recipients).
 func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-
-	if err := r.ParseMultipartForm(5 << 20); err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
-			return
-		}
-		writeError(w, http.StatusBadRequest, "invalid multipart form: "+err.Error())
-		return
-	}
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, `form field "file" is required`)
+	file, _, ok := h.readUpload(w, r)
+	if !ok {
 		return
 	}
 	defer file.Close()
-
-	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
-		writeError(w, http.StatusBadRequest, "only .xlsx files are supported")
-		return
-	}
 
 	valid, problems, err := recipients.ParseExcelReader(file)
 	if err != nil {
@@ -267,29 +307,11 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-
-	if err := r.ParseMultipartForm(5 << 20); err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			writeError(w, http.StatusRequestEntityTooLarge, "uploaded file too large (max 10MB)")
-			return
-		}
-		writeError(w, http.StatusBadRequest, "invalid multipart form: "+err.Error())
-		return
-	}
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, `form field "file" is required`)
+	file, header, ok := h.readUpload(w, r)
+	if !ok {
 		return
 	}
 	defer file.Close()
-
-	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
-		writeError(w, http.StatusBadRequest, "only .xlsx files are supported")
-		return
-	}
 
 	// Read optional template overrides from the form.
 	// Defaults provide an out-of-the-box personalized greeting using {{.Name}}.

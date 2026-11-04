@@ -205,3 +205,68 @@ func TestParseRecipientsDomainCheck(t *testing.T) {
 		}
 	})
 }
+
+// postBytes uploads data as the "file" field of a multipart form.
+func postBytes(h *Handler, route, filename string, data []byte) *httptest.ResponseRecorder {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, _ := writer.CreateFormFile("file", filename)
+	part.Write(data)
+	writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, route, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	NewRouter(h).ServeHTTP(rec, req)
+	return rec
+}
+
+func TestUploadSizeLimit(t *testing.T) {
+	const mb = 1 << 20
+	route := "/api/v1/recipients/parse"
+
+	t.Run("default is 10 MB", func(t *testing.T) {
+		rec := postBytes(NewHandler(&fakeMailer{}, nil, nil), route, "big.xlsx", make([]byte, 10*mb+1))
+		if rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "10 MB") {
+			t.Fatalf("status = %d body = %s, want 413 naming 10 MB", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("a file exactly at the limit is not rejected for size", func(t *testing.T) {
+		h := NewHandler(&fakeMailer{}, nil, nil)
+		h.SetMaxUploadMB(1)
+		// Not a real spreadsheet, so it gets past the size check and fails parsing.
+		if rec := postBytes(h, route, "edge.xlsx", make([]byte, mb)); rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d body = %s, want 400 from parsing", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("changes apply at runtime without a new handler", func(t *testing.T) {
+		h := NewHandler(&fakeMailer{}, nil, nil)
+		twoMB := make([]byte, 2*mb)
+
+		h.SetMaxUploadMB(1)
+		if rec := postBytes(h, route, "f.xlsx", twoMB); rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "1 MB") {
+			t.Fatalf("limit 1: status = %d body = %s, want 413 naming 1 MB", rec.Code, rec.Body)
+		}
+
+		h.SetMaxUploadMB(3)
+		if rec := postBytes(h, route, "f.xlsx", twoMB); rec.Code != http.StatusBadRequest {
+			t.Fatalf("limit 3: status = %d body = %s, want 400 from parsing (size accepted)", rec.Code, rec.Body)
+		}
+
+		h.SetMaxUploadMB(0) // ignored
+		if rec := postBytes(h, route, "f.xlsx", twoMB); rec.Code != http.StatusBadRequest {
+			t.Fatalf("after ignored 0: status = %d, want the limit to stay 3 MB", rec.Code)
+		}
+	})
+
+	t.Run("real spreadsheet under a raised limit parses", func(t *testing.T) {
+		h := NewHandler(&fakeMailer{}, nil, nil)
+		h.SetMaxUploadMB(40)
+		rec := postFileTo(h, route, filepath.Join("..", "..", "samples", "1_valid.xlsx"), "1_valid.xlsx", "file")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
+		}
+	})
+}

@@ -38,8 +38,8 @@ go run ./cmd/server   # creates/updates the database tables automatically on sta
 |---|---|---|---|
 | `GET /healthz` | Liveness check | - | `200 {"status":"ok"}` |
 | `POST /api/v1/emails` | Synchronous single email | JSON: `{"to","subject","body"}` | `200 {"message":"email sent"}` |
-| `POST /api/v1/recipients/parse` | Preview parsed Excel recipients | `multipart/form-data`: `file` | `200 {"valid":[...],"problems":[...]}` |
-| `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file`, `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4}` |
+| `POST /api/v1/recipients/parse` | Preview parsed Excel recipients | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`) | `200 {"valid":[...],"problems":[...]}`, `413` if the file is over the limit |
+| `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`), `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4}` |
 | `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":38,"invalid":4}` |
 | `GET /api/v1/batches/{id}/jobs` | **List jobs for a batch (filter by status)** | Query: `?status=invalid` | `200 [{"id":4,"recipient_email":"...","status":"invalid","last_error":"..."}]` |
 | `GET /api/v1/batches` | **List batches with job counts** | Query: `status`, `q` (filename), `limit` (default 20, max 100), `offset` | `200 {"items":[{"id":1,"filename":"...","status":"completed","total":42,"sent":38,"failed":0,"invalid":4}],"total":1,"limit":20,"offset":0}` |
@@ -218,7 +218,9 @@ Set `AUTO_MIGRATE=false` to run migrations as a separate step before starting th
 
 Certificates are verified against the system trust store. To trust a private CA or a self-signed certificate in development, point `SSL_CERT_FILE` at it.
 
-**Settings overrides.** Selected env settings can be changed from the dashboard (`/api/v1/settings`). Saved values are stored in the `app_settings` table and override the environment; resetting a setting deletes the override. SMTP, sender, domain check and retry settings apply instantly; worker count, pool size and poll interval are saved but reported with `restart_required` until the server restarts. `DATABASE_URL` and the HTTP address/timeouts are never editable.
+**Settings overrides.** Selected env settings can be changed from the dashboard (`/api/v1/settings`). Saved values are stored in the `app_settings` table and override the environment; resetting a setting deletes the override. SMTP, sender, domain check, retry and upload size (`MAX_UPLOAD_MB`) settings apply instantly; worker count, pool size and poll interval are saved but reported with `restart_required` until the server restarts. `DATABASE_URL` and the HTTP address/timeouts are never editable.
+
+**Upload size.** `MAX_UPLOAD_MB` (default 10, allowed 1-50) is the largest spreadsheet both upload endpoints accept; larger files get `413 {"error":"file too large: the limit is N MB"}`. It can be changed on the Settings page without a restart; uploads already in progress keep the limit they started with. The ceiling exists because parsing holds the whole sheet in memory (roughly 13x the file size).
 
 The SMTP password is stored encrypted (AES-256-GCM) with the key in `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`). Without the key the password cannot be edited from the dashboard. Keep the key stable: if it changes, stored secrets are ignored and the environment value is used.
 

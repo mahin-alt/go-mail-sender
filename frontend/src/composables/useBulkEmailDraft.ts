@@ -15,7 +15,7 @@ const PREVIEW_SAMPLE = 5
  */
 export function useBulkEmailDraft() {
   const check = useRecipientCheck()
-  const { file, fileError, result, checking, parseError } = check
+  const { file, fileError, result, checking, parseError, maxUploadMb } = check
   const subject = shallowRef(DEFAULT_SUBJECT)
   const body = shallowRef(DEFAULT_BODY)
   const previewIndex = shallowRef(0)
@@ -76,6 +76,7 @@ export function useBulkEmailDraft() {
     result,
     checking,
     parseError,
+    maxUploadMb,
     validCount,
     skippedCount,
     unverifiedCount,

@@ -26,8 +26,8 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   {
     id: 'sending',
     title: 'Sending behaviour',
-    subtitle: 'How recipients are checked and how many times delivery is attempted.',
-    keys: ['DOMAIN_CHECK_ENABLED', 'MAX_JOB_RETRIES'],
+    subtitle: 'Upload size, recipient checks and delivery attempts.',
+    keys: ['MAX_UPLOAD_MB', 'DOMAIN_CHECK_ENABLED', 'MAX_JOB_RETRIES'],
   },
   {
     id: 'server',
