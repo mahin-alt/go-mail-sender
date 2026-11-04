@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/mail"
@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"sendmail/internal/config"
 	"sendmail/internal/domaincheck"
@@ -173,7 +174,7 @@ func (h *Handler) verifyDomains(ctx context.Context, recs []recipients.Recipient
 	}
 
 	if len(unverified) > 0 {
-		log.Printf("domain check: %d recipient(s) kept but could not be verified (DNS errors)", len(unverified))
+		slog.Warn("domain check could not verify some recipients; they are kept", "count", len(unverified))
 	}
 	return ok, rejected, unverified
 }
@@ -236,7 +237,7 @@ func (h *Handler) SendEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.mailer.Send(req.To, req.Subject, req.Body); err != nil {
-		log.Printf("send email failed: %v", err)
+		slog.Error("send email failed", "err", err)
 		writeError(w, http.StatusBadGateway, "failed to send email")
 		return
 	}
@@ -254,13 +255,16 @@ type parseRecipientsResponse struct {
 
 // ParseRecipients handles POST /api/v1/recipients/parse (preview parsed Excel recipients).
 func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	file, _, ok := h.readUpload(w, r)
 	if !ok {
 		return
 	}
 	defer file.Close()
 
+	t := time.Now()
 	valid, problems, err := recipients.ParseExcelReader(file)
+	parseTime := time.Since(t)
 	if err != nil {
 		if errors.Is(err, recipients.ErrMissingColumns) {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -270,8 +274,13 @@ func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	t = time.Now()
 	valid, rejected, unverified := h.verifyDomains(r.Context(), valid)
+	domainTime := time.Since(t)
 	problems = mergeProblems(problems, rejected)
+
+	slog.Info("recipients parsed", "valid", len(valid), "problems", len(problems), "unverified", len(unverified),
+		"parse", ms(parseTime), "domain_check", ms(domainTime), "total", ms(time.Since(start)))
 
 	writeJSON(w, http.StatusOK, parseRecipientsResponse{
 		Valid:           valid,
@@ -307,6 +316,7 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	file, header, ok := h.readUpload(w, r)
 	if !ok {
 		return
@@ -336,7 +346,9 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse Excel recipients
+	t := time.Now()
 	validRecipients, problems, err := recipients.ParseExcelReader(file)
+	parseTime := time.Since(t)
 	if err != nil {
 		if errors.Is(err, recipients.ErrMissingColumns) {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -353,8 +365,12 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 
 	// Reject rows whose domain cannot receive mail; they are recorded below as
 	// 'invalid' jobs together with the syntax problems.
+	t = time.Now()
 	validRecipients, rejected, unverified := h.verifyDomains(r.Context(), validRecipients)
+	domainTime := time.Since(t)
 	problems = mergeProblems(problems, rejected)
+
+	t = time.Now() // rendering and building the job rows
 
 	jobs := make([]store.Job, 0, len(validRecipients)+len(problems))
 
@@ -401,12 +417,20 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save batch and all rows (valid + invalid) atomically inside a database transaction
+	renderTime := time.Since(t)
+
+	t = time.Now()
 	batchID, err := h.store.CreateBatchWithJobs(r.Context(), header.Filename, subjectTmpl, bodyTmpl, jobs)
+	insertTime := time.Since(t)
 	if err != nil {
-		log.Printf("create batch failed: %v", err)
+		slog.Error("create batch failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to create batch in database")
 		return
 	}
+	slog.Info("batch created", "batch_id", batchID, "filename", header.Filename,
+		"pending", len(validRecipients), "invalid", len(problems), "unverified", len(unverified),
+		"parse", ms(parseTime), "domain_check", ms(domainTime), "render", ms(renderTime),
+		"insert", ms(insertTime), "total", ms(time.Since(start)))
 
 	// Wake up idle workers only if there are pending jobs to send
 	if len(validRecipients) > 0 && h.worker != nil {
@@ -454,7 +478,7 @@ func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "batch not found")
 			return
 		}
-		log.Printf("get batch progress failed: %v", err)
+		slog.Error("get batch progress failed", "batch_id", batchID, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to get batch progress")
 		return
 	}
@@ -495,7 +519,7 @@ func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			log.Printf("list batch jobs failed: %v", err)
+			slog.Error("list batch jobs failed", "batch_id", batchID, "err", err)
 			writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
 			return
 		}
@@ -505,7 +529,7 @@ func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
 
 	jobs, err := h.store.GetBatchJobs(r.Context(), batchID, statusFilter)
 	if err != nil {
-		log.Printf("get batch jobs failed: %v", err)
+		slog.Error("get batch jobs failed", "batch_id", batchID, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
 		return
 	}
@@ -536,11 +560,14 @@ func validateEmailReq(req sendEmailRequest) string {
 	return ""
 }
 
+// ms rounds a duration to milliseconds for logging ("1.081s", "12ms").
+func ms(d time.Duration) time.Duration { return d.Round(time.Millisecond) }
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("write response failed: %v", err)
+		slog.Warn("write response failed", "err", err)
 	}
 }
 
@@ -584,7 +611,7 @@ func (h *Handler) ListBatches(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		log.Printf("list batches failed: %v", err)
+		slog.Error("list batches failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to list batches")
 		return
 	}
@@ -666,7 +693,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request, singleJob bool) 
 			writeError(w, http.StatusNotFound, "no failed job with that id")
 			return
 		}
-		log.Printf("retry failed: %v", err)
+		slog.Error("retry failed", "id", id, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to retry")
 		return
 	}

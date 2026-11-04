@@ -22,7 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/smtp"
 	"strings"
 	"sync"
@@ -291,7 +291,7 @@ func (p *Pool) Close() error {
 			}
 		}
 	}
-	log.Printf("smtp pool closed")
+	slog.Info("smtp pool closed")
 	return firstErr
 }
 

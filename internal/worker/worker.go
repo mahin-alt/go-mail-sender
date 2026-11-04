@@ -16,10 +16,12 @@ package worker
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
+	"sendmail/internal/logging"
 	"sendmail/internal/mailer"
 	"sendmail/internal/store"
 )
@@ -67,7 +69,7 @@ func NewPool(
 func (p *Pool) Start(parentCtx context.Context) {
 	p.ctx, p.cancel = context.WithCancel(parentCtx)
 
-	log.Printf("starting %d background email worker(s) (poll interval: %s)...", p.workerCount, p.pollInterval)
+	slog.Info("starting email workers", "count", p.workerCount, "poll_interval", p.pollInterval)
 	for i := 1; i <= p.workerCount; i++ {
 		p.wg.Add(1)
 		go p.runWorker(i)
@@ -92,7 +94,7 @@ func (p *Pool) Stop() {
 		p.cancel()
 	}
 	p.wg.Wait()
-	log.Printf("all email workers stopped cleanly")
+	slog.Info("email workers stopped")
 }
 
 // runWorker is the main loop for a single worker goroutine.
@@ -124,7 +126,7 @@ func (p *Pool) runWorker(id int) {
 
 			// Transient database error: log and back off slightly before retrying.
 			if !errors.Is(p.ctx.Err(), context.Canceled) {
-				log.Printf("worker %d: claim job error: %v", id, err)
+				slog.Error("claim job failed", "worker", id, "err", err)
 			}
 			select {
 			case <-time.After(1 * time.Second):
@@ -140,27 +142,74 @@ func (p *Pool) runWorker(id int) {
 }
 
 // processJob sends the email and updates the database with the result.
+//
+// Logging levels: a successful send is DEBUG (a 1M-row batch would otherwise
+// write a million lines), a retry is WARN, a final failure is ERROR, and a
+// finished batch gets one INFO summary. Addresses are masked.
 func (p *Pool) processJob(workerID int, job *store.Job) {
-	log.Printf("worker %d: sending email to %s (job %d)...", workerID, job.RecipientEmail, job.ID)
+	to := logging.MaskEmail(job.RecipientEmail)
+	ctx := context.Background()
 
-	// Send email using the pooled mailer
+	start := time.Now()
 	err := p.mailer.Send(job.RecipientEmail, job.Subject, job.Body)
+	sendTime := time.Since(start).Round(time.Millisecond)
 	if err != nil {
-		log.Printf("worker %d: send email failed for job %d: %v", workerID, job.ID, err)
-
-		// Exponential backoff retry: 5s, 10s, 20s...
+		// Linear backoff: 5s, 10s, 15s...
 		retryDelay := time.Duration(job.Attempts*5) * time.Second
-		if markErr := p.store.MarkJobFailed(context.Background(), job.ID, err.Error(), retryDelay); markErr != nil {
-			log.Printf("worker %d: failed to update job failure status for job %d: %v", workerID, job.ID, markErr)
+		if job.Attempts < job.MaxAttempts {
+			slog.Warn("send failed, will retry", "job_id", job.ID, "batch_id", job.BatchID, "to", to,
+				"attempt", job.Attempts, "max_attempts", job.MaxAttempts, "retry_in", retryDelay,
+				"send", sendTime, "err", err)
+		} else {
+			slog.Error("send failed permanently", "job_id", job.ID, "batch_id", job.BatchID, "to", to,
+				"attempts", job.Attempts, "send", sendTime, "err", err)
+		}
+
+		done, markErr := p.store.MarkJobFailed(ctx, job.ID, err.Error(), retryDelay)
+		if markErr != nil {
+			slog.Error("record job failure failed", "job_id", job.ID, "err", markErr)
+			return
+		}
+		if done {
+			p.logBatchCompleted(ctx, job.BatchID)
 		}
 		return
 	}
 
-	// Success! Mark job as sent.
-	if markErr := p.store.MarkJobSent(context.Background(), job.ID); markErr != nil {
-		log.Printf("worker %d: failed to mark job %d as sent: %v", workerID, job.ID, markErr)
+	done, markErr := p.store.MarkJobSent(ctx, job.ID)
+	if markErr != nil {
+		// The email went out but the job stays 'processing'.
+		slog.Error("mark job sent failed", "job_id", job.ID, "err", markErr)
 		return
 	}
+	slog.Debug("email sent", "job_id", job.ID, "batch_id", job.BatchID, "to", to, "worker", workerID,
+		"send", sendTime, "queued", job.QueuedFor)
+	if done {
+		p.logBatchCompleted(ctx, job.BatchID)
+	}
+}
 
-	log.Printf("worker %d: successfully sent job %d to %s", workerID, job.ID, job.RecipientEmail)
+// logBatchCompleted writes the one-line summary of a finished batch: counts,
+// how long it took from upload to the last email, and the sending rate.
+func (p *Pool) logBatchCompleted(ctx context.Context, batchID int64) {
+	bp, err := p.store.GetBatchProgress(ctx, batchID)
+	if err != nil {
+		slog.Info("batch completed", "batch_id", batchID)
+		return
+	}
+	attrs := []any{"batch_id", batchID, "filename", bp.Filename,
+		"sent", bp.Sent, "failed", bp.Failed, "invalid", bp.Invalid}
+	if bp.CompletedAt != nil {
+		took := bp.CompletedAt.Sub(bp.CreatedAt)
+		attrs = append(attrs, "duration", took.Round(time.Millisecond), "rate", sendRate(bp.Sent+bp.Failed, took))
+	}
+	slog.Info("batch completed", attrs...)
+}
+
+// sendRate formats emails handled per second, e.g. "12.5/s".
+func sendRate(n int, d time.Duration) string {
+	if d <= 0 {
+		return fmt.Sprintf("%d in <1ms", n)
+	}
+	return fmt.Sprintf("%.1f/s", float64(n)/d.Seconds())
 }

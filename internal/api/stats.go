@@ -1,7 +1,7 @@
 package api
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -54,7 +54,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := h.store.GetStats(r.Context(), store.StatsOptions{Days: days, Location: loc})
 	if err != nil {
-		log.Printf("get stats failed: %v", err)
+		slog.Error("get stats failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to get stats")
 		return
 	}

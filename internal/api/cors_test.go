@@ -25,6 +25,9 @@ func TestWithCORS_AllowedOrigin(t *testing.T) {
 	if rec.Code != http.StatusTeapot {
 		t.Fatalf("request should reach next handler, got %d", rec.Code)
 	}
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Request-ID" {
+		t.Fatalf("Expose-Headers = %q, want X-Request-ID so the dashboard can read it", got)
+	}
 }
 
 func TestWithCORS_DisallowedOrigin(t *testing.T) {

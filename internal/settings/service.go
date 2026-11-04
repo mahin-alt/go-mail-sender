@@ -13,7 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/mail"
 	"sort"
 	"strings"
@@ -89,12 +89,12 @@ func (s *Service) Load(ctx context.Context) (config.Config, error) {
 		val := row.Value
 		if row.Secret {
 			if val, err = decrypt(s.key, row.Value); err != nil {
-				log.Printf("settings: ignoring stored %s: %v", key, err)
+				slog.Warn("ignoring stored setting", "key", key, "err", err)
 				continue
 			}
 		}
 		if val, err = d.parse(val); err != nil {
-			log.Printf("settings: ignoring stored %s: %v", key, err)
+			slog.Warn("ignoring stored setting", "key", key, "err", err)
 			continue
 		}
 		d.set(&cfg, val)
@@ -255,7 +255,7 @@ func (s *Service) Update(ctx context.Context, ch Change) ([]Item, error) {
 	}
 
 	sort.Strings(changed)
-	log.Printf("settings updated: %s", strings.Join(changed, ", ")) // names only, never values
+	slog.Info("settings updated", "keys", strings.Join(changed, ",")) // names only, never values
 	return s.listLocked(), nil
 }
 

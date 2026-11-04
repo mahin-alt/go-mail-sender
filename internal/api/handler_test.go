@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"sendmail/internal/domaincheck"
+	"sendmail/internal/logging"
 )
 
 // fakeMailer satisfies mailer.Mailer without touching the network.
@@ -269,4 +271,22 @@ func TestUploadSizeLimit(t *testing.T) {
 			t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
 		}
 	})
+}
+
+func TestParseRecipients_LogsStageTimings(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(logging.New(&buf, slog.LevelInfo, "text"))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "9_mixed_everything.xlsx"), "9_mixed_everything.xlsx", "file")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	line := buf.String()
+	for _, part := range []string{`msg="recipients parsed"`, "valid=3", "problems=5", "parse=", "domain_check=", "total="} {
+		if !strings.Contains(line, part) {
+			t.Errorf("log line missing %q:\n%s", part, line)
+		}
+	}
 }

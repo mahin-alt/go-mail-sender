@@ -26,3 +26,26 @@ func TestLoad_MaxUploadMB(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_Logging(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "WARN")
+	t.Setenv("LOG_FORMAT", "json")
+	t.Setenv("LOG_FILE", " logs/server.log ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LogLevel != "warn" || cfg.LogFormat != "json" || cfg.LogFile != "logs/server.log" {
+		t.Errorf("got level=%q format=%q file=%q", cfg.LogLevel, cfg.LogFormat, cfg.LogFile)
+	}
+
+	t.Setenv("LOG_LEVEL", "verbose")
+	if _, err := Load(); err == nil {
+		t.Error("unknown LOG_LEVEL should fail")
+	}
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("LOG_FORMAT", "xml")
+	if _, err := Load(); err == nil {
+		t.Error("unknown LOG_FORMAT should fail")
+	}
+}

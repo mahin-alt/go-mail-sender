@@ -60,6 +60,10 @@ type Job struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	SentAt         *time.Time `json:"sent_at,omitempty"`
+
+	// QueuedFor is how long the job waited, from becoming due (run_at) until a
+	// worker claimed it. Set by ClaimNextJob only; used for logging.
+	QueuedFor time.Duration `json:"-"`
 }
 
 // BatchProgress summarizes the current state and counts of a batch.
@@ -73,6 +77,9 @@ type BatchProgress struct {
 	Pending    int    `json:"pending"`
 	Processing int    `json:"processing"`
 	Invalid    int    `json:"invalid"`
+
+	CreatedAt   time.Time  `json:"created_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 // BatchSummary is one row of the batch list: the batch plus its job counts.
@@ -264,11 +271,13 @@ func (s *Store) ClaimNextJob(ctx context.Context) (*Job, error) {
 	WHERE email_jobs.id = next_job.id
 	RETURNING email_jobs.id, email_jobs.batch_id, email_jobs.recipient_name,
 	          email_jobs.recipient_email, email_jobs.subject, email_jobs.body,
-	          email_jobs.status, email_jobs.attempts, email_jobs.max_attempts
+	          email_jobs.status, email_jobs.attempts, email_jobs.max_attempts,
+	          (EXTRACT(EPOCH FROM (NOW() - email_jobs.run_at)) * 1000)::BIGINT
 	`
 
 	row := s.db.QueryRowContext(ctx, query)
 	var j Job
+	var queuedMS int64 // measured by the database clock, so app and DB clocks need not agree
 	err := row.Scan(
 		&j.ID,
 		&j.BatchID,
@@ -279,6 +288,7 @@ func (s *Store) ClaimNextJob(ctx context.Context) (*Job, error) {
 		&j.Status,
 		&j.Attempts,
 		&j.MaxAttempts,
+		&queuedMS,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -286,6 +296,7 @@ func (s *Store) ClaimNextJob(ctx context.Context) (*Job, error) {
 		}
 		return nil, fmt.Errorf("claim job: %w", err)
 	}
+	j.QueuedFor = time.Duration(queuedMS) * time.Millisecond
 
 	// Update the batch status to 'processing' if it is still 'pending'
 	_ = s.setBatchProcessing(ctx, j.BatchID)
@@ -294,7 +305,8 @@ func (s *Store) ClaimNextJob(ctx context.Context) (*Job, error) {
 }
 
 // MarkJobSent records that an email was successfully sent by a worker.
-func (s *Store) MarkJobSent(ctx context.Context, jobID int64) error {
+// batchDone reports whether this was the batch's last unfinished job.
+func (s *Store) MarkJobSent(ctx context.Context, jobID int64) (batchDone bool, err error) {
 	var batchID int64
 	query := `
 		UPDATE email_jobs
@@ -304,9 +316,8 @@ func (s *Store) MarkJobSent(ctx context.Context, jobID int64) error {
 		WHERE id = $1
 		RETURNING batch_id
 	`
-	err := s.db.QueryRowContext(ctx, query, jobID).Scan(&batchID)
-	if err != nil {
-		return fmt.Errorf("mark job sent: %w", err)
+	if err := s.db.QueryRowContext(ctx, query, jobID).Scan(&batchID); err != nil {
+		return false, fmt.Errorf("mark job sent: %w", err)
 	}
 
 	// Check if this was the last remaining job in the batch
@@ -315,7 +326,8 @@ func (s *Store) MarkJobSent(ctx context.Context, jobID int64) error {
 
 // MarkJobFailed records a failure. If the job has remaining retry attempts,
 // it schedules a retry in the future; otherwise it permanently marks it 'failed'.
-func (s *Store) MarkJobFailed(ctx context.Context, jobID int64, reason string, retryIn time.Duration) error {
+// batchDone reports whether this finished the batch.
+func (s *Store) MarkJobFailed(ctx context.Context, jobID int64, reason string, retryIn time.Duration) (batchDone bool, err error) {
 	var (
 		attempts    int
 		maxAttempts int
@@ -327,9 +339,9 @@ func (s *Store) MarkJobFailed(ctx context.Context, jobID int64, reason string, r
 		FROM email_jobs
 		WHERE id = $1
 	`
-	err := s.db.QueryRowContext(ctx, checkSQL, jobID).Scan(&batchID, &attempts, &maxAttempts)
+	err = s.db.QueryRowContext(ctx, checkSQL, jobID).Scan(&batchID, &attempts, &maxAttempts)
 	if err != nil {
-		return fmt.Errorf("inspect job for failure: %w", err)
+		return false, fmt.Errorf("inspect job for failure: %w", err)
 	}
 
 	if attempts < maxAttempts {
@@ -355,7 +367,7 @@ func (s *Store) MarkJobFailed(ctx context.Context, jobID int64, reason string, r
 		_, err = s.db.ExecContext(ctx, failSQL, reason, jobID)
 	}
 	if err != nil {
-		return fmt.Errorf("update failed job: %w", err)
+		return false, fmt.Errorf("update failed job: %w", err)
 	}
 
 	return s.checkBatchCompletion(ctx, batchID)
@@ -374,21 +386,27 @@ func (s *Store) setBatchProcessing(ctx context.Context, batchID int64) error {
 }
 
 // checkBatchCompletion checks if all jobs for a batch are finished (either 'sent' or 'failed').
-// If so, it updates the batch status to 'completed'.
-func (s *Store) checkBatchCompletion(ctx context.Context, batchID int64) error {
+// If so, it updates the batch status to 'completed' and reports true; it reports
+// false if the batch still has work or was already completed.
+func (s *Store) checkBatchCompletion(ctx context.Context, batchID int64) (bool, error) {
 	query := `
 		UPDATE batches
 		SET status = 'completed',
 		    completed_at = NOW(),
 		    updated_at = NOW()
 		WHERE id = $1
+		  AND status <> 'completed'
 		  AND NOT EXISTS (
 			  SELECT 1 FROM email_jobs
 			  WHERE batch_id = $1 AND status IN ('pending', 'processing')
 		  )
 	`
-	_, err := s.db.ExecContext(ctx, query, batchID)
-	return err
+	res, err := s.db.ExecContext(ctx, query, batchID)
+	if err != nil {
+		return false, fmt.Errorf("check batch completion: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 // GetBatchProgress returns current statistics for a batch.
@@ -402,11 +420,13 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 		       COUNT(*) FILTER (WHERE j.status = 'failed') AS failed_count,
 		       COUNT(*) FILTER (WHERE j.status = 'pending') AS pending_count,
 		       COUNT(*) FILTER (WHERE j.status = 'processing') AS processing_count,
-		       COUNT(*) FILTER (WHERE j.status = 'invalid') AS invalid_count
+		       COUNT(*) FILTER (WHERE j.status = 'invalid') AS invalid_count,
+		       b.created_at,
+		       b.completed_at
 		FROM batches b
 		LEFT JOIN email_jobs j ON j.batch_id = b.id
 		WHERE b.id = $1
-		GROUP BY b.id, b.filename, b.status, b.total_jobs
+		GROUP BY b.id
 	`
 
 	var bp BatchProgress
@@ -420,6 +440,8 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 		&bp.Pending,
 		&bp.Processing,
 		&bp.Invalid,
+		&bp.CreatedAt,
+		&bp.CompletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

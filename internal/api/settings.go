@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"sendmail/internal/settings"
@@ -41,7 +41,7 @@ func writeSettingsError(w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusBadRequest, in.Msg)
 		return
 	}
-	log.Printf("%s failed: %v", what, err)
+	slog.Error(what+" failed", "err", err)
 	writeError(w, http.StatusInternalServerError, "failed to "+what)
 }
 

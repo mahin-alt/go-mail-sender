@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"sendmail/internal/migrations"
 )
@@ -196,5 +197,55 @@ func TestRetryFailedJob_Single(t *testing.T) {
 	}
 	if _, err := st.RetryFailedJob(ctx, ids[2]); !errors.Is(err, ErrJobNotRetryable) {
 		t.Fatalf("sent job: err = %v, want ErrJobNotRetryable", err)
+	}
+}
+
+func TestMarkJob_ReportsBatchCompletionOnce(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	batchID, ids := seedBatch(t, st, "pending", "pending", "invalid")
+
+	if done, err := st.MarkJobSent(ctx, ids[0]); err != nil || done {
+		t.Fatalf("first of two: done=%v err=%v, want false", done, err)
+	}
+	if done, err := st.MarkJobFailed(ctx, ids[1], "boom", 0); err != nil || done {
+		t.Fatalf("failure with attempts left (job back to pending): done=%v err=%v, want false", done, err)
+	}
+	// Use up the remaining attempts so the next failure is final.
+	if _, err := st.db.ExecContext(ctx, `UPDATE email_jobs SET attempts = max_attempts WHERE id = $1`, ids[1]); err != nil {
+		t.Fatal(err)
+	}
+	if done, err := st.MarkJobFailed(ctx, ids[1], "boom", 0); err != nil || !done {
+		t.Fatalf("last job finished: done=%v err=%v, want true", done, err)
+	}
+	if got := batchStatus(t, st, batchID); got != "completed" {
+		t.Fatalf("batch status = %q, want completed", got)
+	}
+	bp, err := st.GetBatchProgress(ctx, batchID)
+	if err != nil || bp.CreatedAt.IsZero() || bp.CompletedAt == nil || bp.CompletedAt.Before(bp.CreatedAt) {
+		t.Fatalf("progress times: %+v err=%v, want created_at and a later completed_at", bp, err)
+	}
+	if done, err := st.checkBatchCompletion(ctx, batchID); err != nil || done {
+		t.Fatalf("already completed: done=%v err=%v, want false (report only once)", done, err)
+	}
+}
+
+func TestClaimNextJob_ReportsQueueTime(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	_, ids := seedBatch(t, st, "pending")
+	if _, err := st.db.ExecContext(ctx, `UPDATE email_jobs SET run_at = NOW() - INTERVAL '2 seconds' WHERE id = $1`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	job, err := st.ClaimNextJob(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ID != ids[0] {
+		t.Fatalf("claimed job %d, want %d (leftover pending jobs in the test schema?)", job.ID, ids[0])
+	}
+	if job.QueuedFor < 2*time.Second || job.QueuedFor > time.Minute {
+		t.Fatalf("QueuedFor = %v, want about 2s", job.QueuedFor)
 	}
 }

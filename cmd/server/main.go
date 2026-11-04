@@ -5,7 +5,7 @@
 // All real logic lives in internal/ packages, where it can be tested.
 //
 // Systems wired together here:
-//   1. config      - reads environment settings (.env)
+//   1. config      - reads environment settings (.env), then sets up logging
 //   2. database    - connects to PostgreSQL via database/sql (pgx driver)
 //   3. store       - manages schema, batches, and the email job queue
 //      (+ saved settings that override the environment)
@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"sendmail/internal/api"
 	"sendmail/internal/config"
 	"sendmail/internal/domaincheck"
+	"sendmail/internal/logging"
 	"sendmail/internal/mailer"
 	"sendmail/internal/migrations"
 	"sendmail/internal/settings"
@@ -47,11 +49,22 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
+	// 1b. Logging: levels, text/json, and optionally a copy in a file.
+	// From here on every line (including old log.Printf calls) goes through it.
+	logger, logFile, err := logging.Setup(logging.Options{
+		Level: cfg.LogLevel, Format: cfg.LogFormat, File: cfg.LogFile,
+	})
+	if err != nil {
+		log.Fatalf("set up logging: %v", err)
+	}
+	defer logFile.Close()
+	slog.Info("logging ready", "log_level", cfg.LogLevel, "log_format", cfg.LogFormat, "log_file", cfg.LogFile)
+
 	// 2. Connect to PostgreSQL using standard library database/sql
-	log.Printf("connecting to database...")
+	slog.Info("connecting to database")
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("open database connection: %v", err)
+		fatal("open database connection", err)
 	}
 	defer db.Close()
 
@@ -59,10 +72,9 @@ func main() {
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
 	if err := db.PingContext(pingCtx); err != nil {
-		log.Printf("WARNING: failed to ping database (%v).", err)
-		log.Printf("Please ensure PostgreSQL is running and DATABASE_URL in .env is correct.")
+		slog.Warn("cannot reach the database; check that PostgreSQL is running and DATABASE_URL is correct", "err", err)
 	} else {
-		log.Printf("database connected successfully")
+		slog.Info("database connected")
 	}
 
 	// 3. Bring the database schema up to date, then create the Store.
@@ -75,18 +87,18 @@ func main() {
 	if cfg.AutoMigrate {
 		applied, err := migrations.Up(migCtx, db)
 		if err != nil {
-			log.Fatalf("apply database migrations: %v", err)
+			fatal("apply database migrations", err)
 		}
 		if len(applied) == 0 {
-			log.Printf("database schema is up to date")
+			slog.Info("database schema is up to date")
 		}
 		for _, m := range applied {
-			log.Printf("applied migration %s", m.Source.Path)
+			slog.Info("applied migration", "file", m.Source.Path)
 		}
 	} else if pending, err := migrations.Pending(migCtx, db); err != nil {
-		log.Fatalf("check database migrations: %v", err)
+		fatal("check database migrations", err)
 	} else if pending {
-		log.Fatalf("database has pending migrations and AUTO_MIGRATE is off: run `goose up` first (see Database migrations in the README)")
+		fatal("database has pending migrations and AUTO_MIGRATE is off: run `goose up` first (see Database migrations in the README)", nil)
 	}
 	st := store.New(db)
 
@@ -95,7 +107,7 @@ func main() {
 	// effective values. The Applier pushes later changes into the running app.
 	encKey, err := settings.ParseKey(cfg.SettingsEncryptionKey)
 	if err != nil {
-		log.Fatalf("%v", err)
+		fatal("settings encryption key", err)
 	}
 	var (
 		smtpPool *mailer.Pool
@@ -110,7 +122,7 @@ func main() {
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer loadCancel()
 	if effective, err := settingsSvc.Load(loadCtx); err != nil {
-		log.Printf("WARNING: could not load saved settings, using environment values: %v", err)
+		slog.Warn("could not load saved settings, using environment values", "err", err)
 	} else {
 		cfg = effective
 	}
@@ -141,9 +153,9 @@ func main() {
 	handler.SetMaxUploadMB(cfg.MaxUploadMB)
 	handler.WithSettings(settingsSvc)
 	if cfg.DomainCheckEnabled {
-		log.Printf("recipient domain (DNS/MX) check enabled")
+		slog.Info("recipient domain (DNS/MX) check enabled")
 	}
-	router := api.WithCORS(api.NewRouter(handler), cfg.CORSAllowedOrigins)
+	router := api.WithRequestLog(api.WithCORS(api.NewRouter(handler), cfg.CORSAllowedOrigins), logger)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -156,8 +168,7 @@ func main() {
 	// 7. Run HTTP Server in a separate goroutine so it doesn't block shutdown listening
 	serverErrChan := make(chan error, 1)
 	go func() {
-		log.Printf("server listening on %s (workers: %d, smtp pool: %d)",
-			cfg.HTTPAddr, cfg.WorkerCount, cfg.SMTPPoolSize)
+		slog.Info("server listening", "addr", cfg.HTTPAddr, "workers", cfg.WorkerCount, "smtp_pool", cfg.SMTPPoolSize)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErrChan <- err
 		}
@@ -169,9 +180,9 @@ func main() {
 
 	select {
 	case err := <-serverErrChan:
-		log.Fatalf("http server error: %v", err)
+		fatal("http server error", err)
 	case sig := <-shutdownSigChan:
-		log.Printf("received signal %v: initiating graceful shutdown...", sig)
+		slog.Info("shutting down", "signal", sig.String())
 	}
 
 	// Graceful shutdown sequence:
@@ -179,9 +190,9 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("http shutdown error: %v", err)
+		slog.Error("http shutdown failed", "err", err)
 	} else {
-		log.Printf("http server stopped")
+		slog.Info("http server stopped")
 	}
 
 	// b. Stop workers and wait for any active in-flight email sends to complete
@@ -190,8 +201,19 @@ func main() {
 
 	// c. Close SMTP connections
 	if err := smtpPool.Close(); err != nil {
-		log.Printf("smtp pool close error: %v", err)
+		slog.Error("smtp pool close failed", "err", err)
 	}
 
-	log.Printf("graceful shutdown complete. Bye!")
+	slog.Info("graceful shutdown complete")
+}
+
+// fatal logs an error and exits, like log.Fatalf but through the structured
+// logger so the line also reaches the log file. Deferred cleanups do not run.
+func fatal(msg string, err error) {
+	if err != nil {
+		slog.Error(msg, "err", err)
+	} else {
+		slog.Error(msg)
+	}
+	os.Exit(1)
 }

@@ -85,6 +85,16 @@ type Config struct {
 	// then refuses to start if the database is behind.
 	AutoMigrate bool
 
+	// LogLevel is the least serious level written: "debug", "info", "warn" or "error".
+	LogLevel string
+
+	// LogFormat is "text" (key=value, easy to read) or "json" (for log tools).
+	LogFormat string
+
+	// LogFile, when set, receives a copy of every log line (e.g. "logs/server.log").
+	// Empty means the terminal (stderr) only.
+	LogFile string
+
 	// SettingsEncryptionKey is a base64-encoded 32-byte key (openssl rand -base64 32)
 	// used to encrypt secret settings, such as the SMTP password, in the database.
 	// Without it, secrets cannot be edited from the dashboard.
@@ -125,6 +135,17 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("MAX_UPLOAD_MB %d is too large: the limit is %d", maxUploadMB, MaxUploadMBLimit)
 	}
 
+	logLevel := strings.ToLower(getEnv("LOG_LEVEL", "info"))
+	switch logLevel {
+	case "debug", "info", "warn", "error":
+	default:
+		return Config{}, fmt.Errorf("LOG_LEVEL %q is invalid: use debug, info, warn or error", logLevel)
+	}
+	logFormat := strings.ToLower(getEnv("LOG_FORMAT", "text"))
+	if logFormat != "text" && logFormat != "json" {
+		return Config{}, fmt.Errorf("LOG_FORMAT %q is invalid: use text or json", logFormat)
+	}
+
 	return Config{
 		DatabaseURL:  getEnv("DATABASE_URL", "postgres://localhost:5432/sendmail?sslmode=disable"),
 		SMTPHost:     smtpHost,
@@ -148,6 +169,10 @@ func Load() (Config, error) {
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
 
 		AutoMigrate: getEnvBool("AUTO_MIGRATE", true),
+
+		LogLevel:  logLevel,
+		LogFormat: logFormat,
+		LogFile:   strings.TrimSpace(os.Getenv("LOG_FILE")),
 
 		SettingsEncryptionKey: getEnv("SETTINGS_ENCRYPTION_KEY", ""),
 

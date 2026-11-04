@@ -35,6 +35,7 @@ func WithCORS(next http.Handler, allowedOrigins []string) http.Handler {
 			h.Add("Vary", "Origin")
 			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			h.Set("Access-Control-Expose-Headers", "X-Request-ID") // let the dashboard read it
 			h.Set("Access-Control-Max-Age", "600")
 		}
 

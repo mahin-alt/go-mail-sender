@@ -40,7 +40,7 @@ go run ./cmd/server   # creates/updates the database tables automatically on sta
 | `POST /api/v1/emails` | Synchronous single email | JSON: `{"to","subject","body"}` | `200 {"message":"email sent"}` |
 | `POST /api/v1/recipients/parse` | Preview parsed Excel recipients | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`) | `200 {"valid":[...],"problems":[...]}`, `413` if the file is over the limit |
 | `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`), `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4}` |
-| `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":38,"invalid":4}` |
+| `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":38,"invalid":4,"created_at":"...","completed_at":"..."}` |
 | `GET /api/v1/batches/{id}/jobs` | **List jobs for a batch (filter by status)** | Query: `?status=invalid` | `200 [{"id":4,"recipient_email":"...","status":"invalid","last_error":"..."}]` |
 | `GET /api/v1/batches` | **List batches with job counts** | Query: `status`, `q` (filename), `limit` (default 20, max 100), `offset` | `200 {"items":[{"id":1,"filename":"...","status":"completed","total":42,"sent":38,"failed":0,"invalid":4}],"total":1,"limit":20,"offset":0}` |
 | `GET /api/v1/batches/{id}/jobs?limit=` | **Paged job list** (adding `limit`, `offset` or `q` switches to the paged form) | Query: `status`, `q` (email/name), `limit`, `offset` | `200 {"items":[...],"total":42,"limit":20,"offset":0}` |
@@ -108,14 +108,44 @@ Content-Type: application/json
 ```
 cmd/server/main.go            entry point - wires config, database, smtp pool, worker pool, http server
 internal/config/              reads settings from process env / .env
+internal/logging/             log/slog setup (levels, text/json, optional log file) and email masking
 internal/template/            personalized template engine using text/template
 internal/recipients/          Excel .xlsx parser and validation
 internal/store/               batches, settings, stats, and the FOR UPDATE SKIP LOCKED job queue
 internal/migrations/          the database schema as numbered SQL files (goose), embedded in the binary
 internal/mailer/              SMTP connection pool and message delivery
 internal/worker/              background Go worker goroutines with graceful shutdown
-internal/api/                 HTTP routes, handlers, and validation
+internal/api/                 HTTP routes, handlers, validation, CORS and the request log
 ```
+
+---
+
+## Logging
+
+The server logs with Go's built-in `log/slog`: every line has a level and `key=value` fields.
+
+| `.env` | Values | Meaning |
+|---|---|---|
+| `LOG_LEVEL` | `debug`, `info` (default), `warn`, `error` | The least serious level written (a minimum: `debug` shows the most). `info` shows the story: startup, requests that change something, every rejected or failed request, batch created / completed with timings, retries and failures. `debug` adds the dashboard's polling reads and one line per email sent, so use it only while investigating |
+| `LOG_FORMAT` | `text` (default), `json` | `text` is easy to read; `json` is for log tools |
+| `LOG_FILE` | a path, e.g. `logs/server.log` | Every line is also appended to this file (the folder is created). Empty = terminal only. `logs/` is gitignored |
+
+Changing them needs a restart. Read the file with `tail -f logs/server.log`, or `grep level=ERROR logs/server.log`.
+
+```
+level=INFO  msg="recipients parsed" valid=780493 problems=169547 unverified=0 parse=6.191s domain_check=467ms total=6.707s
+level=INFO  msg="batch created" batch_id=1 filename=9_mixed_everything.xlsx pending=3 invalid=5 unverified=0 parse=1ms domain_check=0s render=0s insert=4ms total=5ms
+level=INFO  msg=request req_id=6ecc38cf method=POST path=/api/v1/batches status=202 duration=5ms
+level=DEBUG msg="email sent" job_id=1 batch_id=1 to=a***@example.com worker=4 send=3ms queued=4ms
+level=INFO  msg="batch completed" batch_id=1 filename=9_mixed_everything.xlsx sent=3 failed=0 invalid=5 duration=16ms rate=191.1/s
+level=WARN  msg=request req_id=e2da5ecd method=POST path=/api/v1/recipients/parse status=413 duration=30ms
+```
+
+- **Request log:** one line per API call (not `/healthz`). 5xx is ERROR, 4xx WARN; successful POST/PUT/DELETE are INFO; successful GET/HEAD and CORS preflights are DEBUG (the dashboard polls every few seconds). The same `req_id` is returned in the `X-Request-ID` response header, so a failed request seen in the browser can be found in the log.
+- **Timings (INFO):** `recipients parsed` and `batch created` split the upload into `parse`, `domain_check`, `render`, `insert` and `total`; `batch completed` gives `duration` (upload to last email) and `rate` (emails handled per second).
+- **Emails:** a send is DEBUG with `send` (SMTP time) and `queued` (how long it waited for a worker); a retry is WARN and a final failure ERROR, both with `send`. Addresses are masked (`a***@gmail.com`).
+- **Never logged:** passwords and other secrets, full email addresses, email bodies.
+- **No rotation yet:** the file grows until you delete it (a restart appends). In production prefer `LOG_FILE=` empty and let systemd or Docker keep the logs.
 
 ---
 
