@@ -1,0 +1,16 @@
+{"time":"2026-11-08T17:56:48.178624533+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-08T17:56:48.178656134+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-08T17:56:48.181132722+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-08T17:56:48.204184649+06:00","level":"INFO","msg":"applied migration","file":"00001_create_batches_and_email_jobs.sql"}
+{"time":"2026-11-08T17:56:48.204204078+06:00","level":"INFO","msg":"applied migration","file":"00002_create_app_settings.sql"}
+{"time":"2026-11-08T17:56:48.204206534+06:00","level":"INFO","msg":"applied migration","file":"00003_add_stats_indexes.sql"}
+{"time":"2026-11-08T17:56:48.204208236+06:00","level":"INFO","msg":"applied migration","file":"00004_add_cancelled_status.sql"}
+{"time":"2026-11-08T17:56:48.204367003+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-08T17:56:48.204463844+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-08T17:56:54.738445867+06:00","level":"INFO","msg":"recipients parsed","valid":880533,"problems":69507,"unverified":0,"parse":5988000000,"domain_check":0,"total":6020000000}
+{"time":"2026-11-08T17:56:54.975465876+06:00","level":"INFO","msg":"request","req_id":"0aad5d6f","method":"POST","path":"/api/v1/recipients/parse","status":200,"duration":6257000000}
+{"time":"2026-11-08T17:56:55.512962609+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-08T17:56:55.513127724+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-08T17:56:55.513161489+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-08T17:56:55.513171396+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-08T17:56:55.513180587+06:00","level":"INFO","msg":"graceful shutdown complete"}

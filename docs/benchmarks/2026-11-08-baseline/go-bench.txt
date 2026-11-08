@@ -1,0 +1,12 @@
+goos: linux
+goarch: amd64
+pkg: sendmail/internal/recipients
+cpu: 12th Gen Intel(R) Core(TM) i5-12400
+BenchmarkParseExcelReader-12    	       1	6236225678 ns/op	       262.0 peak-heap-MB	     69507 problem-rows	    880533 valid-rows	3477189624 B/op	69421140 allocs/op
+BenchmarkParseExcelReader-12    	       1	6266520514 ns/op	       268.6 peak-heap-MB	     69507 problem-rows	    880533 valid-rows	3477088976 B/op	69420044 allocs/op
+BenchmarkParseExcelReader-12    	       1	6319380791 ns/op	       267.4 peak-heap-MB	     69507 problem-rows	    880533 valid-rows	3477034064 B/op	69420037 allocs/op
+BenchmarkParseExcelReader-12    	       1	6266281618 ns/op	       273.9 peak-heap-MB	     69507 problem-rows	    880533 valid-rows	3477251128 B/op	69420050 allocs/op
+BenchmarkParseExcelReader-12    	       1	6264299950 ns/op	       268.9 peak-heap-MB	     69507 problem-rows	    880533 valid-rows	3476923344 B/op	69420026 allocs/op
+BenchmarkParseExcelReader-12    	       1	6221326746 ns/op	       273.7 peak-heap-MB	     69507 problem-rows	    880533 valid-rows	3476214152 B/op	69419974 allocs/op
+PASS
+ok  	sendmail/internal/recipients	37.638s

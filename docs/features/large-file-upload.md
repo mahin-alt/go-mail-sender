@@ -7,9 +7,10 @@
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
 - **Last done:** (2026-11-08) Audit of the whole upload -> parse -> store -> send -> display path after a 1M-row file crashed the browser tab. The audit, the 4-phase plan and the route plan are recorded under "Scaling plan" below. A disconnect test on a scratch schema confirmed that a request cut off half way saves nothing (see "Tab closed half way").
-- **Next:** Phase 1 on a new branch from `main` (`feat/upload-summary-response`): counts + samples + capped problems, a problem `code`, the frontend switched to counts, the streaming parser, and paging required on `GET /batches/{id}/jobs`.
-- **Blocked on / waiting for the user:** go-ahead for Phase 1. (Cancel a Bulk Email was committed and merged into `main` first, so Phase 1 starts from a clean `main`.)
-- **Updated:** 2026-11-08
+  Then (branch `chore/benchmark-baseline`): benchmark tooling (`scripts/bench.sh`, `internal/recipients/parse_bench_test.go`, guide in `docs/benchmarks/README.md`) and the baseline run on the 1M sample in `docs/benchmarks/2026-11-08-baseline/` (summary under "Baseline numbers" below).
+- **Next:** rewrite Phases 1-2 below to the newer requirements (see Open questions: no valid emails in any response, every problem must stay viewable, problems from their own paged endpoint), then start Phase 1 on a new branch from `main`.
+- **Blocked on / waiting for the user:** (1) commit the benchmark branch and move the tag `bench/baseline-2026-11-08` onto that commit (today it points at `86cffbe`, which does not contain the benchmark tooling, so a re-run from the tag would need the files copied in); (2) storage choice for check results: separate `uploads` + `upload_rows` tables (recommended) or `batches` + `email_jobs` with a `draft` status; (3) where the email preview gets its 5 names (recommended: `GET /uploads/{id}/sample`).
+- **Updated:** 2026-11-08 (benchmark baseline)
 
 ## Why
 Staff want to check and send spreadsheets of a million rows or more. The upload limit was a hard-coded 10 MB, and the 1M-row sample (`samples/12_million_mixed.xlsx`) is 18 MB. With the limit raised, a 1M-row check crashed the browser tab (out of memory), and the server held the whole file in memory at every step.
@@ -69,6 +70,9 @@ Staff want to check and send spreadsheets of a million rows or more. The upload 
 - [ ] `Idempotency-Key` on `POST /batches` so a double click or a retry cannot create two batches
 
 ## Open questions
+- **Requirements from the user (2026-11-08), which replace "first 500 problems" in Phase 1:** no valid emails in any response; every problem row must be viewable on Verify Emails; a colleague suggested fetching problems from their own paged endpoint (keyset `after=row`), which needs check results stored server-side under an `upload_id`. That also removes the double parse: Send takes `upload_id` instead of the file.
+- Store check results in new `uploads` + `upload_rows` tables (recommended: `email_jobs` stays "only emails meant to be sent", no draft filtering in the 26 queries that read `batches`/`email_jobs`) or in `batches` + `email_jobs` with a `draft` status plus `row_num` and `problem_code` columns?
+- Email preview names without valid emails in the response: `GET /uploads/{id}/sample?limit=5` (recommended), a made-up example name, or the first valid row only?
 - Phase 1: cap the problems list at 500 or 1,000? (Phase 2 replaces the cap with paging.)
 - Phase 2: keep the multipart `POST /batches` for Postman/scripts (it would create an upload internally and answer `202` with an importing batch), or remove it once the frontend moved?
 - Phase 2: keep `POST /recipients/parse` as a small synchronous check for small files, or retire it in favour of `POST /uploads`?
@@ -108,6 +112,18 @@ Everything happens inside one HTTP request. Scratch schema test: `POST /batches`
 | `POST /batches/{id}/retry`, `/cancel`, `POST /jobs/{id}/retry` | Bulk Email detail | - | - | keep counters in step |
 | `GET /stats` | Dashboard | - | - | read counters |
 | `POST /emails`, settings routes, `/healthz` | Single Email, Settings | unchanged | `MAX_UPLOAD_MB` cap can rise (streaming) | send rate setting |
+
+## Baseline numbers (2026-11-08)
+Full results: [docs/benchmarks/2026-11-08-baseline/results.md](../benchmarks/2026-11-08-baseline/results.md). 1M sample, domain check **off** (so 880,533 valid / 69,507 problems; with the domain check on, about 100k rows more fail on bad domains), i5-12400, Postgres 18.
+| What | Baseline |
+|---|---|
+| Parser (Go benchmark) | 6.26 s, **peak heap ~270 MB**, 3.5 GB allocated, 69M allocations |
+| `POST /recipients/parse` | 6.25 s, **67.5 MB response**, server peak memory 454-528 MB |
+| `POST /batches` | 17.96 s (parse 6.0 + render 3.9 + insert 8.0), server peak memory **814 MB**, 4.1 MB response, `email_jobs` 259 MB on disk |
+| Workers (5, local Mailpit) | **475 emails/s** -> ~31 min for 880k |
+| Cancel the 1M batch | 4.34 s |
+| Batch progress / list / stats | median 131 / 422 / 86 ms |
+| Jobs: first page / offset 900k / Invalid tab / search with no match | median 43 / 193 / 147 / 527 ms |
 
 ## Verification
 - `go build ./... && go vet ./... && go test ./...` and the DB tests in a scratch schema.
