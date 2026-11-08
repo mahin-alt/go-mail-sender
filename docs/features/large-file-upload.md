@@ -2,25 +2,26 @@
 
 **Status:** in progress
 **Branch:** `feat/upload-size-limit` (based on: `main` at `0a7a573`)
-**Owner / session notes:** first goal is only to *parse* 1M+ row files; sending batches that large comes later.
+**Owner / session notes:** started as "parse 1M+ row files"; on 2026-11-08 a 1M-row test crashed the browser tab, and the scope grew into the 4-phase scaling plan below (upload, import, review and send all made to handle 1M+ rows).
 
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
-- **Last done:** `MAX_UPLOAD_MB` setting (instant, default 10, 1-50) on both upload endpoints; frontend reads the limit from Settings. Go + frontend checks pass, and it was run against a scratch-schema API: 18 MB / 1M-row sample parses at 40 MB, 45 MB file is refused, lowering to 10 MB applies with no restart.
-- **Next:** shrink the parse response (new branch from `main`). Today it returns every valid row: for the 1M sample that is **78 MB of JSON** (780,493 valid + 169,547 problems), while the UI only uses the count and the first 5 rows. Agreed shape: `valid_count` + `valid_sample` (5 rows, the New Bulk Email preview needs real names), `problems_count` + `problem_counts` per kind (the review tabs count kinds today from the full list, so a capped list would make them wrong) + the first 500 problems, same for `unverified`. Same change for `POST /batches`. Then stream the parser (`Rows()` instead of `GetRows`).
-- **Blocked on / waiting for the user:** nothing. The `MAX_UPLOAD_MB` work is committed and merged into `main`; logging comes first, then the response change.
-- **Updated:** 2026-11-04
+- **Last done:** (2026-11-08) Audit of the whole upload -> parse -> store -> send -> display path after a 1M-row file crashed the browser tab. The audit, the 4-phase plan and the route plan are recorded under "Scaling plan" below. A disconnect test on a scratch schema confirmed that a request cut off half way saves nothing (see "Tab closed half way").
+- **Next:** Phase 1 on a new branch from `main` (`feat/upload-summary-response`): counts + samples + capped problems, a problem `code`, the frontend switched to counts, the streaming parser, and paging required on `GET /batches/{id}/jobs`.
+- **Blocked on / waiting for the user:** go-ahead for Phase 1. (Cancel a Bulk Email was committed and merged into `main` first, so Phase 1 starts from a clean `main`.)
+- **Updated:** 2026-11-08
 
 ## Why
-Staff want to check (and later send) spreadsheets of a million rows or more. The upload limit was a hard-coded 10 MB, and the 1M-row sample (`samples/12_million_mixed.xlsx`) is 18 MB.
+Staff want to check and send spreadsheets of a million rows or more. The upload limit was a hard-coded 10 MB, and the 1M-row sample (`samples/12_million_mixed.xlsx`) is 18 MB. With the limit raised, a 1M-row check crashed the browser tab (out of memory), and the server held the whole file in memory at every step.
 
 ## Scope
 **In:**
-- Configurable upload size limit, changeable at runtime.
-- Making the parse/preview of a 1M-row file usable (response size, parser memory).
+- Configurable upload size limit, changeable at runtime (done).
+- Phases 1-3 of the scaling plan: small responses, streaming parser, background import, paged review, render at send time, faster and safer workers, progress counters.
 
 **Out (not now):**
-- Sending 1M-row batches safely: background import, stuck-job reaper, idempotent uploads, delivery throughput (see the audit notes below).
+- Phase 4 (separate worker process, object storage, archiving old `email_jobs`) until there is more than one server.
+- Server push instead of polling (its own roadmap row, decision 0010).
 
 ## Design and decisions
 - **Decision:** the limit is a Settings entry `MAX_UPLOAD_MB` that applies **instantly** (option A), not on restart (option B). **Because:** it is read on every request, so nothing needs a restart; the user wants to change it back and forth (10 -> 50 -> 40) without downtime. Same pattern as `DOMAIN_CHECK_ENABLED` (an atomic value in the handler, updated by the settings Applier).
@@ -39,11 +40,74 @@ Staff want to check (and later send) spreadsheets of a million rows or more. The
 - [x] Frontend tests: limit from Settings, `uploadLimitMb` helper
 - [x] README, `.env.example`
 - [x] Run against a scratch-schema API (see Verification)
-- [ ] Parse response: counts + samples instead of full lists
-- [ ] Streaming parser (`Rows()` iterator)
+
+**Phase 1: small responses + streaming parser** (same routes, new response shape)
+- [ ] `RowError` gets a `code` (`empty_email`, `empty_name`, `invalid_email`, `duplicate`, `bad_domain`, `unverified`); the frontend reads the code instead of guessing from the reason text (`lib/problems.ts`)
+- [ ] `POST /recipients/parse` and `POST /batches`: `valid_count`, `valid_sample` (5), `problem_count`, `problem_counts` per code, `problems` (first 500), `unverified_count`, `unverified` (first 500)
+- [ ] Frontend: Review report and New Bulk Email read the counts; tab counts come from `problem_counts`; the table shows at most 500 rows plus a "showing 500 of N" line
+- [ ] Streaming parser: `f.Rows()` instead of `f.GetRows()`; measure heap on the 1M sample before/after
+- [ ] `GET /batches/{id}/jobs` without paging params gets a default `limit` (today it returns every job, 1M rows); check nothing outside the frontend uses the plain-array form
+- [ ] Tests (Go + Vitest), README API table, scratch-schema run with the 1M sample in the UI
+
+**Phase 2: upload once, import in the background**
+- [ ] Migration: `uploads` table (id, filename, sha256, status, counts, error, created_at, expires_at) and `upload_rows` (upload_id, row, name, email, code, reason)
+- [ ] `POST /uploads`: save the file to disk, return `202 {upload_id}`; same sha256 within the expiry returns the existing upload
+- [ ] Import job: stream rows, validate, dedup, `COPY` into `upload_rows` in chunks; survives a closed tab; on server restart an unfinished import starts again
+- [ ] Domain check on the unique domains only, in parallel, with a cache; rows updated by domain in SQL
+- [ ] `GET /uploads/{id}` (status, progress, counts, sample) and `GET /uploads/{id}/problems?code=&after=&limit=` (keyset paging)
+- [ ] `POST /batches` with JSON `{upload_id, subject, body}`: `INSERT INTO email_jobs ... SELECT FROM upload_rows`, no re-upload
+- [ ] Render at send time: workers render from `batches.subject_template` / `body_template`; `email_jobs.subject/body` stop being filled
+- [ ] Frontend: upload progress, "Checking N rows..." progress by polling, paged problems table, Verify -> New Bulk Email hands over `upload_id` instead of the File
+- [ ] Cleanup of expired uploads, files and rows
+
+**Phase 3: sending at scale**
+- [ ] Workers claim up to N jobs per query and mark them sent/failed in bulk
+- [ ] Send rate limit setting (emails per second) for the SMTP provider
+- [ ] Stuck-job reaper: `processing` with an old `locked_at` goes back to `pending` (shared with the "Failures endpoint + stuck-job recovery" roadmap row)
+- [ ] Counter columns on `batches` (`sent_count`, `failed_count`, ...) updated with the job updates; progress, list and stats read them instead of `COUNT(*)`
+- [ ] Keyset paging (`after=`) for `GET /batches/{id}/jobs`; a cheaper search than `ILIKE '%x%'`
+- [ ] `Idempotency-Key` on `POST /batches` so a double click or a retry cannot create two batches
 
 ## Open questions
-- Should the problems preview be capped at 500, or paged from a new endpoint?
+- Phase 1: cap the problems list at 500 or 1,000? (Phase 2 replaces the cap with paging.)
+- Phase 2: keep the multipart `POST /batches` for Postman/scripts (it would create an upload internally and answer `202` with an importing batch), or remove it once the frontend moved?
+- Phase 2: keep `POST /recipients/parse` as a small synchronous check for small files, or retire it in favour of `POST /uploads`?
+- Phase 2: dedup in a Go map while streaming (simple, about 60 MB per 1M emails) or in SQL after `COPY` (no memory limit, more SQL)? Go map recommended until files reach about 10M rows.
+
+## Scaling plan (proposed 2026-11-08, not started)
+
+### Audit: what happens to a 1M-row file today
+| # | Where | Today | Problem |
+|---|---|---|---|
+| 1 | `recipients.parseFile` | `GetRows` loads every row | heap about 13x file size (18 MB -> 233 MB) |
+| 2 | `POST /recipients/parse` | returns every valid row and problem | 78 MB JSON; UI uses a count and 5 rows |
+| 3 | `ReviewReport.vue` | renders every problem row, filters the full list 3 times for tab counts | 170k `<tr>` elements: this crashed the tab |
+| 4 | Verify -> New Bulk Email | the file is uploaded and parsed again on Send | double work |
+| 5 | `verifyDomains` | one DNS lookup after another, inside the request | many domains -> minutes, then the 120 s frontend timeout |
+| 6 | `CreateBatch` | renders subject + body for every row up front | ~630 MB RAM; the same body stored 1M times (299 MB per batch) |
+| 7 | `CreateBatchWithJobs` | one transaction inside the HTTP request | cut-off request saves nothing; double click = two batches |
+| 8 | worker | 4 DB round trips per email | ~3 ms/job, about 50 min of DB work per worker for 1M |
+| 9 | worker | nothing resets jobs stuck in `processing` | a crash leaves them stuck forever |
+| 10 | worker | no send rate limit | providers throttle or block (e.g. 14/s -> 1M takes ~20 h anyway) |
+| 11 | progress, list, stats | `COUNT(*) FILTER` over a batch's jobs on every poll | scans 1M rows every few seconds |
+| 12 | `GET /batches/{id}/jobs` | `OFFSET` + `COUNT(*)` + `ILIKE`; unpaged mode returns all jobs | slow deep pages; 1M-row response possible |
+
+### Tab closed half way (verified 2026-11-08)
+Everything happens inside one HTTP request. Scratch schema test: `POST /batches` with the 1M sample, client cut off after 12 s. Server log: `create batch failed err="insert jobs chunk: context canceled"`, `status=500 duration=11.996s`; afterwards 0 batches, 0 jobs. Go cancels the request's context when the client goes away; the insert uses that context, so the transaction rolls back. The 12 s of parsing and rendering were wasted, and the user sees no result. The frontend's 120 s axios timeout behaves the same way as closing the tab. A Verify Emails result lives only in the tab's memory (`useRecipientCheck`, `pendingCheck` store), so a reload means uploading again. Phase 2 fixes both: the file and the import live on the server under an `upload_id`.
+
+### Routes: today and after the plan
+| Route | Used by (frontend) | Phase 1 | Phase 2 | Phase 3 |
+|---|---|---|---|---|
+| `POST /recipients/parse` | Verify Emails, New Bulk Email check | summary response | open question: keep for small files or retire | - |
+| `POST /batches` (multipart) | New Bulk Email Send | summary response | JSON `{upload_id, subject, body}`; multipart is an open question | `Idempotency-Key` |
+| `POST /uploads` | - | - | new: save file, `202 {upload_id}` | - |
+| `GET /uploads/{id}` | - | - | new: status, progress, counts, sample | - |
+| `GET /uploads/{id}/problems` | - | - | new: keyset-paged problems by `code` | - |
+| `GET /batches`, `GET /batches/{id}` | Bulk Emails list/detail, polling | - | - | read counters |
+| `GET /batches/{id}/jobs` | Bulk Email detail table | default `limit` when unpaged | - | keyset `after=` |
+| `POST /batches/{id}/retry`, `/cancel`, `POST /jobs/{id}/retry` | Bulk Email detail | - | - | keep counters in step |
+| `GET /stats` | Dashboard | - | - | read counters |
+| `POST /emails`, settings routes, `/healthz` | Single Email, Settings | unchanged | `MAX_UPLOAD_MB` cap can rise (streaming) | send rate setting |
 
 ## Verification
 - `go build ./... && go vet ./... && go test ./...` and the DB tests in a scratch schema.
@@ -57,3 +121,4 @@ Staff want to check (and later send) spreadsheets of a million rows or more. The
 
 ## Notes / history
 - 2026-11-04: measured the 1M-row sample with the real code in a scratch schema: parse 6.1 s / 233 MB, render 4.0 s / 629 MB, single-transaction insert of 950k rows 8.7 s, one batch = 299 MB on disk, claim + mark-sent ~3 ms per job (~336 jobs/s per worker, DB only). Full audit and proposals (background import, render at send time, batch claiming, rate limiting, counters) were discussed in the session; record them here when that phase starts.
+- 2026-11-08: a 1M-row check crashed the browser tab (out of memory). Full audit, 4-phase plan and route plan recorded under "Scaling plan". Phase 4 (later): separate worker process, object storage for files, archiving/partitioning old `email_jobs`.
