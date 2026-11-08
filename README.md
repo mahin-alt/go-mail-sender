@@ -157,6 +157,7 @@ Run all unit tests:
 go test ./...
 ```
 
+Benchmarks with the 1M-row sample (parser plus the API on a scratch schema, about 6 minutes): `scripts/bench.sh`. How to read and compare results: [docs/benchmarks/README.md](docs/benchmarks/README.md).
 
 ## Database migrations
 
