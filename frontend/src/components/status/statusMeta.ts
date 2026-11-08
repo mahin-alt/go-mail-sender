@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import { CircleCheck, CircleX, Clock, LoaderCircle, TriangleAlert } from '@lucide/vue'
+import { Ban, CircleCheck, CircleX, Clock, LoaderCircle, TriangleAlert } from '@lucide/vue'
 
 import type { BatchStatus, JobStatus } from '@/types/api'
 
@@ -42,6 +42,8 @@ export function describeStatus(status: Status, ctx: StatusContext = {}): StatusM
       return { label: 'Skipped (invalid)', tone: 'warn', icon: TriangleAlert, spin: false }
     case 'processing':
       return { label: 'Sending', tone: 'active', icon: LoaderCircle, spin: true }
+    case 'cancelled':
+      return { label: 'Cancelled', tone: 'quiet', icon: Ban, spin: false }
     case 'pending': {
       if (attempts > 0) {
         const of = maxAttempts > 0 ? ` ${attempts} of ${maxAttempts}` : ''

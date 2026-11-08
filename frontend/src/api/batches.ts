@@ -3,6 +3,7 @@ import type {
   BatchProgress,
   BatchStatus,
   BatchSummary,
+  CancelResult,
   Job,
   JobStatus,
   Paged,
@@ -50,6 +51,12 @@ export async function listJobs(id: number, params: JobListParams): Promise<Paged
 
 export async function retryBatch(id: number): Promise<RetryResult> {
   const { data } = await http.post<RetryResult>(`/api/v1/batches/${id}/retry`)
+  return data
+}
+
+/** Stop a batch that is still sending: its unsent emails are cancelled for good. */
+export async function cancelBatch(id: number): Promise<CancelResult> {
+  const { data } = await http.post<CancelResult>(`/api/v1/batches/${id}/cancel`)
   return data
 }
 

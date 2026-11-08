@@ -9,7 +9,14 @@ import type { BatchListParams, JobListParams } from '@/api/batches'
 import { ApiError } from '@/api/errors'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { BatchProgress, BatchSummary, Job, Paged, RetryResult } from '@/types/api'
+import type {
+  BatchProgress,
+  BatchSummary,
+  CancelResult,
+  Job,
+  Paged,
+  RetryResult,
+} from '@/types/api'
 import BulkEmailDetailView from '@/views/BulkEmailDetailView.vue'
 import BulkEmailsView from '@/views/BulkEmailsView.vue'
 
@@ -19,6 +26,7 @@ const api = vi.hoisted(() => ({
   listJobs: vi.fn<(id: number, p: JobListParams) => Promise<Paged<Job>>>(),
   retryBatch: vi.fn<(id: number) => Promise<RetryResult>>(),
   retryJob: vi.fn<(id: number) => Promise<RetryResult>>(),
+  cancelBatch: vi.fn<(id: number) => Promise<CancelResult>>(),
 }))
 vi.mock('@/api/batches', () => api)
 vi.mock('@/api/health', () => ({ getHealth: () => Promise.resolve({ status: 'ok' }) }))
@@ -33,6 +41,7 @@ const batch = (over: Partial<BatchSummary> = {}): BatchSummary => ({
   pending: 0,
   processing: 0,
   invalid: 0,
+  cancelled: 0,
   created_at: new Date().toISOString(),
   ...over,
 })
@@ -96,7 +105,7 @@ describe('Bulk Emails list', () => {
   it('shows a count on each status tab', async () => {
     const { wrapper } = await mountAt('/bulk-emails', BulkEmailsView)
     const tabs = wrapper.findAll('[aria-label="Filter by status"] button').map((b) => b.text())
-    expect(tabs).toEqual(['All 24', 'Pending 24', 'Processing 24', 'Completed 22'])
+    expect(tabs).toEqual(['All 24', 'Pending 24', 'Processing 24', 'Completed 22', 'Cancelled 24'])
   })
 
   it('puts the chosen tab and search in the address, going back to page 1', async () => {
@@ -148,6 +157,8 @@ describe('Bulk Email detail', () => {
     pending: 0,
     processing: 0,
     invalid: 0,
+    cancelled: 0,
+    created_at: new Date().toISOString(),
     ...over,
   })
 
@@ -195,6 +206,50 @@ describe('Bulk Email detail', () => {
     confirm.click()
     await flushPromises()
     expect(api.retryBatch).toHaveBeenCalledWith(42)
+  })
+
+  it('offers Cancel only while the batch is still sending', async () => {
+    const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
+    expect(wrapper.find('button[aria-label^="Cancel this Bulk Email"]').exists()).toBe(false)
+
+    api.getBatch.mockResolvedValue(progress({ status: 'processing', pending: 250, failed: 0 }))
+    queryClient.clear()
+    const again = await mountAt('/bulk-emails/42', BulkEmailDetailView)
+    expect(
+      again.wrapper.find('button[aria-label="Cancel this Bulk Email (250 unsent)"]').exists(),
+    ).toBe(true)
+  })
+
+  it('asks before cancelling, then cancels and reports how many were stopped', async () => {
+    api.getBatch.mockResolvedValue(progress({ status: 'processing', pending: 250, failed: 0 }))
+    api.cancelBatch.mockResolvedValue({ cancelled: 250 })
+    const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
+    await wrapper.find('button[aria-label="Cancel this Bulk Email (250 unsent)"]').trigger('click')
+    await flushPromises()
+    expect(api.cancelBatch).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Stop this Bulk Email?')
+    expect(document.body.textContent).toContain('250 unsent emails will not be sent.')
+    const buttons = [...document.body.querySelectorAll('button')]
+    expect(buttons.some((b) => b.textContent?.trim() === 'Keep sending')).toBe(true)
+    buttons.find((b) => b.textContent?.trim() === 'Stop sending')!.click()
+    await flushPromises()
+    expect(api.cancelBatch).toHaveBeenCalledWith(42)
+  })
+
+  it('shows a cancelled batch with its Cancelled count and tab', async () => {
+    api.getBatch.mockResolvedValue(
+      progress({
+        status: 'cancelled',
+        failed: 0,
+        cancelled: 630036,
+        cancelled_at: new Date().toISOString(),
+      }),
+    )
+    const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
+    expect(wrapper.text()).toContain('Cancelled')
+    expect(wrapper.text()).toContain('630,036')
+    expect(wrapper.text()).toContain('stopped before sending')
+    expect(wrapper.find('button[aria-label^="Cancel this Bulk Email"]').exists()).toBe(false)
   })
 
   it('retries one email from its row without opening the panel', async () => {

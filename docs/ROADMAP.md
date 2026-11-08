@@ -10,6 +10,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Dashboard: Vue frontend | in progress (Phases 1-6 done) | [features/dashboard.md](features/dashboard.md), [frontend/](frontend/) | branch `feat/frontend-new-bulk-email`; app shell, Bulk Emails and New Bulk Email done; next Phase 7 Failures |
 | Large spreadsheet uploads (1M+ rows) | in progress | [features/large-file-upload.md](features/large-file-upload.md) | branch `feat/upload-size-limit`; `MAX_UPLOAD_MB` setting done; next: smaller parse response, streaming parser |
 | Structured logging | done (essentials) | [features/logging.md](features/logging.md), [decisions/0012](decisions/0012-structured-logging-slog.md) | branch `feat/structured-logging`; slog, `LOG_*` in `.env`, `logs/server.log`, request log, masked addresses |
+| Cancel a Bulk Email | done | [features/cancel-batch.md](features/cancel-batch.md) | branch `feat/cancel-batch`; `cancelled` job and batch status, `POST /batches/{id}/cancel`, Cancel button; migration 00004 adds status CHECKs |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing`; maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |

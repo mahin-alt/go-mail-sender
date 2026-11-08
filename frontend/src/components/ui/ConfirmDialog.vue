@@ -10,6 +10,10 @@ const props = defineProps<{
   busy?: boolean
   /** Centre the title and the message, with more room before the buttons. */
   centered?: boolean
+  /** Label of the button that closes without acting (default "Cancel"). */
+  dismissLabel?: string
+  /** Show the confirm button in the danger colour, for actions that cannot be undone. */
+  danger?: boolean
 }>()
 const visible = defineModel<boolean>('visible', { required: true })
 const emit = defineEmits<{ confirm: [] }>()
@@ -41,11 +45,17 @@ const pt = computed(() => ({
       <Button
         rounded
         severity="secondary"
-        label="Cancel"
+        :label="dismissLabel ?? 'Cancel'"
         :disabled="busy"
         @click="visible = false"
       />
-      <Button rounded :label="confirmLabel" :loading="busy" @click="emit('confirm')" />
+      <Button
+        rounded
+        :severity="danger ? 'danger' : undefined"
+        :label="confirmLabel"
+        :loading="busy"
+        @click="emit('confirm')"
+      />
     </template>
   </Dialog>
 </template>

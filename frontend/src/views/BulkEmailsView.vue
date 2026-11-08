@@ -11,7 +11,12 @@ import { PAGE_SIZE, useUrlFilters } from '@/composables/useUrlFilters'
 import { useBatches, useBatchStatusCounts } from '@/queries/useBatches'
 import type { BatchStatus } from '@/types/api'
 
-const STATUSES = ['pending', 'processing', 'completed'] as const satisfies readonly BatchStatus[]
+const STATUSES = [
+  'pending',
+  'processing',
+  'completed',
+  'cancelled',
+] as const satisfies readonly BatchStatus[]
 
 const { status, q, page, offset, update } = useUrlFilters(STATUSES)
 const counts = useBatchStatusCounts()
@@ -30,6 +35,7 @@ const tabs = computed<TabOption<Tab>[]>(() => [
   { value: 'pending', label: 'Pending', count: counts.value.pending },
   { value: 'processing', label: 'Processing', count: counts.value.processing },
   { value: 'completed', label: 'Completed', count: counts.value.completed },
+  { value: 'cancelled', label: 'Cancelled', count: counts.value.cancelled },
 ])
 
 const filtered = computed(() => status.value !== '' || q.value !== '')

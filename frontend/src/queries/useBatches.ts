@@ -8,6 +8,7 @@ import {
 } from '@tanstack/vue-query'
 
 import {
+  cancelBatch,
   getBatch,
   listBatches,
   listJobs,
@@ -30,7 +31,7 @@ export function useBatches(params: MaybeRefOrGetter<BatchListParams>) {
   })
 }
 
-const COUNTED: (BatchStatus | '')[] = ['', 'pending', 'processing', 'completed']
+const COUNTED: (BatchStatus | '')[] = ['', 'pending', 'processing', 'completed', 'cancelled']
 
 /**
  * Counts for the status tabs: one tiny request (limit 1) per tab, read from `total`.
@@ -78,6 +79,15 @@ export function useRetryBatch() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => retryBatch(id),
+    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.batches.all }),
+  })
+}
+
+/** Stop a batch that is still sending. Refreshes all batch data afterwards. */
+export function useCancelBatch() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => cancelBatch(id),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.batches.all }),
   })
 }

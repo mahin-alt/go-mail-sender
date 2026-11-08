@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
-import { ChevronLeft, RotateCw } from '@lucide/vue'
+import { Ban, ChevronLeft, RotateCw } from '@lucide/vue'
 import { useRoute } from 'vue-router'
 
+import CancelConfirmDialog from '@/components/batches/CancelConfirmDialog.vue'
 import JobDrawer from '@/components/batches/JobDrawer.vue'
 import JobsTable from '@/components/batches/JobsTable.vue'
 import RetryConfirmDialog from '@/components/batches/RetryConfirmDialog.vue'
@@ -17,7 +18,7 @@ import { ApiError } from '@/api/errors'
 import { PAGE_SIZE, useUrlFilters } from '@/composables/useUrlFilters'
 import { useRetryFeedback } from '@/composables/useRetryFeedback'
 import { exactTime, formatNumber, percent, timeAgo } from '@/lib/format'
-import { useBatch, useJobs, useRetryBatch, useRetryJob } from '@/queries/useBatches'
+import { useBatch, useCancelBatch, useJobs, useRetryBatch, useRetryJob } from '@/queries/useBatches'
 import type { Job, JobStatus } from '@/types/api'
 
 const JOB_STATUSES = [
@@ -25,6 +26,7 @@ const JOB_STATUSES = [
   'failed',
   'invalid',
   'pending',
+  'cancelled',
 ] as const satisfies readonly JobStatus[]
 
 const route = useRoute()
@@ -42,6 +44,7 @@ const jobs = useJobs(id, jobParams)
 
 const retryBatch = useRetryBatch()
 const retryJob = useRetryJob()
+const cancelBatch = useCancelBatch()
 const feedback = useRetryFeedback()
 
 const progress = computed(() => batch.data.value)
@@ -54,8 +57,31 @@ const tabs = computed<TabOption<Tab>[]>(() => {
     { value: 'failed', label: 'Failed', count: p?.failed },
     { value: 'invalid', label: 'Invalid', count: p?.invalid },
     { value: 'pending', label: 'Pending', count: p?.pending },
+    // Only batches that were stopped have cancelled emails; keep the tab out of the way otherwise.
+    ...(p && p.cancelled > 0
+      ? [{ value: 'cancelled' as const, label: 'Cancelled', count: p.cancelled }]
+      : []),
   ]
 })
+
+/** A batch can be stopped while it still has emails to send. */
+const canCancel = computed(
+  () => progress.value?.status === 'pending' || progress.value?.status === 'processing',
+)
+const cancelOpen = shallowRef(false)
+
+function confirmCancel() {
+  cancelBatch.mutate(id.value, {
+    onSuccess: (result) => {
+      cancelOpen.value = false
+      feedback.cancelled(result.cancelled)
+    },
+    onError: (error) => {
+      cancelOpen.value = false
+      feedback.failed(error, 'Could not cancel')
+    },
+  })
+}
 
 const confirmOpen = shallowRef(false)
 const selected = shallowRef<Job | null>(null)
@@ -133,6 +159,15 @@ const retryingJobId = computed(() => (retryJob.isPending.value ? retryJob.variab
         >
           <RotateCw class="size-4" aria-hidden="true" /> Retry
         </button>
+        <button
+          v-if="canCancel"
+          type="button"
+          class="bg-track hover:bg-hover text-bad-ink inline-flex cursor-pointer items-center gap-2 rounded-full px-5.5 py-3 text-sm font-semibold"
+          :aria-label="`Cancel this Bulk Email (${progress.pending} unsent)`"
+          @click="cancelOpen = true"
+        >
+          <Ban class="size-4" aria-hidden="true" /> Cancel
+        </button>
       </template>
     </PageHeader>
 
@@ -150,6 +185,13 @@ const retryingJobId = computed(() => (retryJob.isPending.value ? retryJob.variab
         :caption="progress.failed > 0 ? 'can be retried' : 'none'"
       />
       <KpiTile
+        v-if="progress.status === 'cancelled'"
+        label="Cancelled"
+        :value="progress.cancelled"
+        caption="stopped before sending"
+      />
+      <KpiTile
+        v-else
         label="Pending"
         :value="progress.pending"
         :caption="progress.processing > 0 ? `${progress.processing} sending now` : 'none waiting'"
@@ -238,6 +280,12 @@ const retryingJobId = computed(() => (retryJob.isPending.value ? retryJob.variab
       :count="progress.failed"
       :busy="retryBatch.isPending.value"
       @confirm="confirmRetryBatch"
+    />
+    <CancelConfirmDialog
+      v-model:visible="cancelOpen"
+      :unsent="progress.pending"
+      :busy="cancelBatch.isPending.value"
+      @confirm="confirmCancel"
     />
   </template>
 </template>

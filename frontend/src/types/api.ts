@@ -4,8 +4,8 @@
  * Only endpoints that exist are typed here.
  */
 
-export type JobStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'invalid'
-export type BatchStatus = 'pending' | 'processing' | 'completed' | 'failed'
+export type JobStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'invalid' | 'cancelled'
+export type BatchStatus = 'pending' | 'processing' | 'completed' | 'cancelled'
 
 /** Standard error body: `{"error": "message"}`. */
 export interface ApiErrorBody {
@@ -35,6 +35,7 @@ export interface BatchSummary {
   pending: number
   processing: number
   invalid: number
+  cancelled: number
   created_at: string
   completed_at?: string
 }
@@ -50,6 +51,15 @@ export interface BatchProgress {
   pending: number
   processing: number
   invalid: number
+  cancelled: number
+  created_at: string
+  completed_at?: string
+  cancelled_at?: string
+}
+
+/** POST /batches/{id}/cancel */
+export interface CancelResult {
+  cancelled: number
 }
 
 /** Row of GET /batches/{id}/jobs (paged form). */

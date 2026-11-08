@@ -249,3 +249,78 @@ func TestClaimNextJob_ReportsQueueTime(t *testing.T) {
 		t.Fatalf("QueuedFor = %v, want about 2s", job.QueuedFor)
 	}
 }
+
+func TestCancelBatch(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	batchID, ids := seedBatch(t, st, "pending", "pending", "sent", "invalid", "processing", "failed")
+
+	n, err := st.CancelBatch(ctx, batchID)
+	if err != nil || n != 2 {
+		t.Fatalf("CancelBatch = %d, %v; want 2 pending jobs cancelled", n, err)
+	}
+	want := []string{"cancelled", "cancelled", "sent", "invalid", "processing", "failed"}
+	for i, id := range ids {
+		if got := jobStatus(t, st, id); got != want[i] {
+			t.Errorf("job %d status = %q, want %q", i, got, want[i])
+		}
+	}
+	bp, err := st.GetBatchProgress(ctx, batchID)
+	if err != nil || bp.Status != "cancelled" || bp.CancelledAt == nil || bp.Cancelled != 2 || bp.Processing != 1 {
+		t.Fatalf("progress = %+v err=%v, want cancelled with cancelled_at, 2 cancelled, 1 processing", bp, err)
+	}
+
+	// The email that was mid-send finishes; the batch must stay cancelled.
+	if done, err := st.MarkJobSent(ctx, ids[4]); err != nil || done {
+		t.Fatalf("in-flight job finishing: done=%v err=%v, want false", done, err)
+	}
+	if got := batchStatus(t, st, batchID); got != "cancelled" {
+		t.Fatalf("batch status after in-flight send = %q, want cancelled", got)
+	}
+
+	if _, err := st.CancelBatch(ctx, batchID); !errors.Is(err, ErrBatchNotActive) {
+		t.Fatalf("second cancel: err = %v, want ErrBatchNotActive", err)
+	}
+	if _, err := st.RetryFailedJobs(ctx, batchID, nil); !errors.Is(err, ErrBatchNotActive) {
+		t.Fatalf("retry on cancelled batch: err = %v, want ErrBatchNotActive", err)
+	}
+	if _, err := st.RetryFailedJob(ctx, ids[5]); !errors.Is(err, ErrBatchNotActive) {
+		t.Fatalf("retry one job of a cancelled batch: err = %v, want ErrBatchNotActive", err)
+	}
+	if _, err := st.CancelBatch(ctx, 999999999); !errors.Is(err, ErrBatchNotFound) {
+		t.Fatalf("unknown batch: err = %v, want ErrBatchNotFound", err)
+	}
+}
+
+func TestCancelBatch_FailureDuringCancelIsNotRetried(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	batchID, ids := seedBatch(t, st, "processing", "pending")
+	if _, err := st.CancelBatch(ctx, batchID); err != nil {
+		t.Fatal(err)
+	}
+	// The in-flight email fails with attempts left: normally it would go back to pending.
+	if _, err := st.MarkJobFailed(ctx, ids[0], "connection reset", 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := jobStatus(t, st, ids[0]); got != "cancelled" {
+		t.Fatalf("job status = %q, want cancelled (never requeued after a cancel)", got)
+	}
+}
+
+func TestCancelBatch_FinishedBatchIsNotActive(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	batchID, _ := seedBatch(t, st, "invalid") // nothing to send: created as completed
+	if _, err := st.CancelBatch(ctx, batchID); !errors.Is(err, ErrBatchNotActive) {
+		t.Fatalf("err = %v, want ErrBatchNotActive", err)
+	}
+}
+
+func TestStatusCheckConstraints(t *testing.T) {
+	st := openTestStore(t)
+	_, ids := seedBatch(t, st, "pending")
+	if _, err := st.db.Exec(`UPDATE email_jobs SET status = 'canceled' WHERE id = $1`, ids[0]); err == nil {
+		t.Fatal("a misspelled status should be rejected by the database")
+	}
+}

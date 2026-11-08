@@ -693,6 +693,10 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request, singleJob bool) 
 			writeError(w, http.StatusNotFound, "no failed job with that id")
 			return
 		}
+		if errors.Is(err, store.ErrBatchNotActive) {
+			writeError(w, http.StatusConflict, "the bulk email was cancelled; its emails cannot be retried")
+			return
+		}
 		slog.Error("retry failed", "id", id, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to retry")
 		return
@@ -702,4 +706,41 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request, singleJob bool) 
 		h.worker.Wake()
 	}
 	writeJSON(w, http.StatusOK, retryResponse{Retried: n})
+}
+
+type cancelResponse struct {
+	Cancelled int `json:"cancelled"`
+}
+
+// CancelBatch handles POST /api/v1/batches/{id}/cancel:
+// stops a batch that is still sending. Unsent emails become 'cancelled' and
+// are never sent or retried; an email being sent right now finishes.
+func (h *Handler) CancelBatch(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusInternalServerError, "database store is not configured")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid batch id")
+		return
+	}
+
+	n, err := h.store.CancelBatch(r.Context(), id)
+	switch {
+	case errors.Is(err, store.ErrBatchNotFound):
+		writeError(w, http.StatusNotFound, "batch not found")
+		return
+	case errors.Is(err, store.ErrBatchNotActive):
+		writeError(w, http.StatusConflict, "the bulk email has already finished or was cancelled")
+		return
+	case err != nil:
+		slog.Error("cancel batch failed", "batch_id", id, "err", err)
+		writeError(w, http.StatusInternalServerError, "failed to cancel")
+		return
+	}
+
+	slog.Info("batch cancelled", "batch_id", id, "cancelled", n)
+	writeJSON(w, http.StatusOK, cancelResponse{Cancelled: n})
 }

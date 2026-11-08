@@ -27,6 +27,7 @@ func NewRouter(h *Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/batches/{id}", h.GetBatch)
 	mux.HandleFunc("GET /api/v1/batches/{id}/jobs", h.GetBatchJobs)
 	mux.HandleFunc("POST /api/v1/batches/{id}/retry", h.RetryBatch)
+	mux.HandleFunc("POST /api/v1/batches/{id}/cancel", h.CancelBatch)
 	mux.HandleFunc("POST /api/v1/jobs/{id}/retry", h.RetryJob)
 
 	// Dashboard Overview numbers.

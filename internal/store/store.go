@@ -27,6 +27,10 @@ var ErrNoJobs = errors.New("no jobs available in queue")
 // ErrBatchNotFound is returned when a requested batch ID does not exist.
 var ErrBatchNotFound = errors.New("batch not found")
 
+// ErrBatchNotActive is returned when a batch can no longer be changed that way:
+// cancelling a batch that already finished, or retrying a cancelled one.
+var ErrBatchNotActive = errors.New("batch is not active")
+
 // ErrJobNotRetryable is returned when a job does not exist or is not in the 'failed' state.
 var ErrJobNotRetryable = errors.New("job not found or not failed")
 
@@ -37,7 +41,7 @@ type Batch struct {
 	SubjectTemplate string     `json:"subject_template"`
 	BodyTemplate    string     `json:"body_template"`
 	TotalJobs       int        `json:"total_jobs"`
-	Status          string     `json:"status"` // 'pending', 'processing', 'completed', 'failed'
+	Status          string     `json:"status"` // 'pending', 'processing', 'completed', 'cancelled'
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	CompletedAt     *time.Time `json:"completed_at,omitempty"`
@@ -51,7 +55,7 @@ type Job struct {
 	RecipientEmail string     `json:"recipient_email"`
 	Subject        string     `json:"subject"`
 	Body           string     `json:"body"`
-	Status         string     `json:"status"` // 'pending', 'processing', 'sent', 'failed'
+	Status         string     `json:"status"` // 'pending', 'processing', 'sent', 'failed', 'invalid', 'cancelled'
 	Attempts       int        `json:"attempts"`
 	MaxAttempts    int        `json:"max_attempts"`
 	LastError      *string    `json:"last_error,omitempty"`
@@ -77,9 +81,11 @@ type BatchProgress struct {
 	Pending    int    `json:"pending"`
 	Processing int    `json:"processing"`
 	Invalid    int    `json:"invalid"`
+	Cancelled  int    `json:"cancelled"`
 
 	CreatedAt   time.Time  `json:"created_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
 }
 
 // BatchSummary is one row of the batch list: the batch plus its job counts.
@@ -93,6 +99,7 @@ type BatchSummary struct {
 	Pending     int        `json:"pending"`
 	Processing  int        `json:"processing"`
 	Invalid     int        `json:"invalid"`
+	Cancelled   int        `json:"cancelled"`
 	CreatedAt   time.Time  `json:"created_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
@@ -345,10 +352,14 @@ func (s *Store) MarkJobFailed(ctx context.Context, jobID int64, reason string, r
 	}
 
 	if attempts < maxAttempts {
-		// Retry later: set status back to 'pending' with a future run_at timestamp.
+		// Retry later: set status back to 'pending' with a future run_at timestamp,
+		// unless the batch was cancelled while this email was being sent.
 		retrySQL := `
 			UPDATE email_jobs
-			SET status = 'pending',
+			SET status = CASE
+			        WHEN (SELECT status FROM batches WHERE id = email_jobs.batch_id) = 'cancelled' THEN 'cancelled'
+			        ELSE 'pending'
+			    END,
 			    run_at = NOW() + ($1 * INTERVAL '1 millisecond'),
 			    last_error = $2,
 			    updated_at = NOW()
@@ -385,9 +396,9 @@ func (s *Store) setBatchProcessing(ctx context.Context, batchID int64) error {
 	return err
 }
 
-// checkBatchCompletion checks if all jobs for a batch are finished (either 'sent' or 'failed').
+// checkBatchCompletion checks if all jobs for a batch are finished (none pending or processing).
 // If so, it updates the batch status to 'completed' and reports true; it reports
-// false if the batch still has work or was already completed.
+// false if the batch still has work, was already completed, or was cancelled.
 func (s *Store) checkBatchCompletion(ctx context.Context, batchID int64) (bool, error) {
 	query := `
 		UPDATE batches
@@ -395,7 +406,7 @@ func (s *Store) checkBatchCompletion(ctx context.Context, batchID int64) (bool, 
 		    completed_at = NOW(),
 		    updated_at = NOW()
 		WHERE id = $1
-		  AND status <> 'completed'
+		  AND status IN ('pending', 'processing') -- never overwrite 'completed' or 'cancelled'
 		  AND NOT EXISTS (
 			  SELECT 1 FROM email_jobs
 			  WHERE batch_id = $1 AND status IN ('pending', 'processing')
@@ -421,8 +432,10 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 		       COUNT(*) FILTER (WHERE j.status = 'pending') AS pending_count,
 		       COUNT(*) FILTER (WHERE j.status = 'processing') AS processing_count,
 		       COUNT(*) FILTER (WHERE j.status = 'invalid') AS invalid_count,
+		       COUNT(*) FILTER (WHERE j.status = 'cancelled') AS cancelled_count,
 		       b.created_at,
-		       b.completed_at
+		       b.completed_at,
+		       b.cancelled_at
 		FROM batches b
 		LEFT JOIN email_jobs j ON j.batch_id = b.id
 		WHERE b.id = $1
@@ -440,8 +453,10 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 		&bp.Pending,
 		&bp.Processing,
 		&bp.Invalid,
+		&bp.Cancelled,
 		&bp.CreatedAt,
 		&bp.CompletedAt,
+		&bp.CancelledAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -523,6 +538,7 @@ func (s *Store) ListBatches(ctx context.Context, f BatchListFilter) ([]BatchSumm
 		       COUNT(*) FILTER (WHERE j.status = 'pending'),
 		       COUNT(*) FILTER (WHERE j.status = 'processing'),
 		       COUNT(*) FILTER (WHERE j.status = 'invalid'),
+		       COUNT(*) FILTER (WHERE j.status = 'cancelled'),
 		       b.created_at, b.completed_at
 		FROM batches b
 		LEFT JOIN email_jobs j ON j.batch_id = b.id
@@ -542,7 +558,7 @@ func (s *Store) ListBatches(ctx context.Context, f BatchListFilter) ([]BatchSumm
 		var b BatchSummary
 		if err := rows.Scan(
 			&b.ID, &b.Filename, &b.Status, &b.Total,
-			&b.Sent, &b.Failed, &b.Pending, &b.Processing, &b.Invalid,
+			&b.Sent, &b.Failed, &b.Pending, &b.Processing, &b.Invalid, &b.Cancelled,
 			&b.CreatedAt, &b.CompletedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan batch row: %w", err)
@@ -624,6 +640,19 @@ func (s *Store) RetryFailedJobs(ctx context.Context, batchID int64, jobID *int64
 	}
 	defer tx.Rollback()
 
+	// Lock the batch row so a retry and a cancel of the same batch cannot interleave.
+	var status string
+	err = tx.QueryRowContext(ctx, `SELECT status FROM batches WHERE id = $1 FOR UPDATE`, batchID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrBatchNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("lock batch: %w", err)
+	}
+	if status == "cancelled" {
+		return 0, ErrBatchNotActive // a cancelled batch stays stopped
+	}
+
 	res, err := tx.ExecContext(ctx, `
 		UPDATE email_jobs
 		SET status = 'pending',
@@ -681,6 +710,61 @@ func (s *Store) RetryFailedJob(ctx context.Context, jobID int64) (int, error) {
 		return 0, fmt.Errorf("find failed job: %w", err)
 	}
 	return s.RetryFailedJobs(ctx, batchID, &jobID)
+}
+
+// CancelBatch stops a batch that is still sending: every 'pending' job becomes
+// 'cancelled' (never sent, never retried) and the batch becomes 'cancelled'.
+// Emails a worker is sending right now finish normally; if one of them fails
+// it is cancelled instead of being retried (see MarkJobFailed).
+// Returns how many jobs were cancelled, ErrBatchNotFound for an unknown batch,
+// or ErrBatchNotActive if the batch already finished or was cancelled.
+func (s *Store) CancelBatch(ctx context.Context, batchID int64) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var status string
+	err = tx.QueryRowContext(ctx, `SELECT status FROM batches WHERE id = $1 FOR UPDATE`, batchID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrBatchNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("lock batch: %w", err)
+	}
+	if status != "pending" && status != "processing" {
+		return 0, ErrBatchNotActive
+	}
+
+	// A job a worker claims at this moment is locked by its claim; this UPDATE
+	// waits for it, re-checks the status and skips it (it is 'processing' now).
+	res, err := tx.ExecContext(ctx, `
+		UPDATE email_jobs
+		SET status = 'cancelled',
+		    last_error = 'cancelled',
+		    updated_at = NOW()
+		WHERE batch_id = $1 AND status = 'pending'
+	`, batchID)
+	if err != nil {
+		return 0, fmt.Errorf("cancel jobs: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("cancel jobs: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE batches
+		SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+		WHERE id = $1
+	`, batchID); err != nil {
+		return 0, fmt.Errorf("cancel batch: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit cancel: %w", err)
+	}
+	return int(n), nil
 }
 
 // SettingRow is one stored settings override. For secret settings Value holds

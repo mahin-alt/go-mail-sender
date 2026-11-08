@@ -89,6 +89,7 @@ const batch = (over: Partial<BatchSummary> = {}): BatchSummary => ({
   pending: 0,
   processing: 0,
   invalid: 0,
+  cancelled: 0,
   created_at: new Date().toISOString(),
   ...over,
 })
