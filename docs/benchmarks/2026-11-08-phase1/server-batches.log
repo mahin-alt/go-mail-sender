@@ -1,0 +1,15 @@
+{"time":"2026-11-08T19:37:44.693840936+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-08T19:37:44.693872814+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-08T19:37:44.697842151+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-08T19:37:44.699345162+06:00","level":"INFO","msg":"database schema is up to date"}
+{"time":"2026-11-08T19:37:44.699511616+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-08T19:37:44.699957054+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-08T19:38:03.974003404+06:00","level":"INFO","msg":"batch created","batch_id":1,"filename":"12_million_mixed.xlsx","pending":880533,"invalid":69507,"unverified":0,"parse":6209000000,"domain_check":0,"render":4120000000,"insert":8374000000,"total":18751000000}
+{"time":"2026-11-08T19:38:03.974086874+06:00","level":"INFO","msg":"request","req_id":"db9dd5bb","method":"POST","path":"/api/v1/batches","status":202,"duration":18751000000}
+{"time":"2026-11-08T19:39:09.228099084+06:00","level":"INFO","msg":"batch cancelled","batch_id":1,"cancelled":867260}
+{"time":"2026-11-08T19:39:09.228182156+06:00","level":"INFO","msg":"request","req_id":"8664ce27","method":"POST","path":"/api/v1/batches/1/cancel","status":200,"duration":4192000000}
+{"time":"2026-11-08T19:39:57.221439046+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-08T19:39:57.221489729+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-08T19:39:57.221505781+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-08T19:39:57.221738646+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-08T19:39:57.221750044+06:00","level":"INFO","msg":"graceful shutdown complete"}

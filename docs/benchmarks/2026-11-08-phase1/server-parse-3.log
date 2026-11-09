@@ -1,0 +1,13 @@
+{"time":"2026-11-08T19:37:33.376786751+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-08T19:37:33.376829448+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-08T19:37:33.379635857+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-08T19:37:33.381284999+06:00","level":"INFO","msg":"database schema is up to date"}
+{"time":"2026-11-08T19:37:33.381514765+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-08T19:37:33.382038838+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-08T19:37:44.157909963+06:00","level":"INFO","msg":"upload checked","upload_id":3,"filename":"12_million_mixed.xlsx","rows":950040,"valid":880533,"problems":69507,"unverified":0,"domain_check":0,"total":10256000000}
+{"time":"2026-11-08T19:37:44.157994399+06:00","level":"INFO","msg":"request","req_id":"3327a2df","method":"POST","path":"/api/v1/uploads","status":201,"duration":10256000000}
+{"time":"2026-11-08T19:37:44.672315143+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-08T19:37:44.672440912+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-08T19:37:44.672471473+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-08T19:37:44.672494531+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-08T19:37:44.672501132+06:00","level":"INFO","msg":"graceful shutdown complete"}

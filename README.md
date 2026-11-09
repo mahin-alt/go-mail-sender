@@ -34,16 +34,20 @@ go run ./cmd/server   # creates/updates the database tables automatically on sta
 
 ## API Contract
 
+A Postman collection with every endpoint is in [postman/go-mail-sender.postman_collection.json](postman/go-mail-sender.postman_collection.json) (Postman: Import -> the file). Requests that create something save their id (`upload_id`, `batch_id`, `job_id`) for the next ones; `baseUrl` defaults to `http://localhost:8080`. Requests marked "really sends" send email through the configured SMTP server.
+
 | Method & Path | Purpose | Request | Response |
 |---|---|---|---|
 | `GET /healthz` | Liveness check | - | `200 {"status":"ok"}` |
 | `POST /api/v1/emails` | Synchronous single email | JSON: `{"to","subject","body"}` | `200 {"message":"email sent"}` |
-| `POST /api/v1/recipients/parse` | Preview parsed Excel recipients | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`) | `200 {"valid":[...],"problems":[...]}`, `413` if the file is over the limit |
-| `POST /api/v1/batches` | **Queue background email campaign** | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`), `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4}` |
+| `POST /api/v1/uploads` | **Check a spreadsheet** (nothing is sent). The file is read row by row and every row is kept for 24 hours with its kind: `ok`, `unverified` (sent, domain not checked), or skipped: `empty_email`, `empty_name`, `invalid_email`, `duplicate`, `bad_domain`. Returns totals only, never the rows | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`) | `201 {"upload_id":1,"filename":"...","status":"ready","total_rows":950040,"valid_count":780493,"problem_count":169547,"unverified_count":0,"problem_counts":{"empty_email":69507,"bad_domain":100040,...},"expires_at":"..."}`, `400` bad file, `413` over the limit |
+| `GET /api/v1/uploads/{id}` | **Totals of a checked file** | URL parameter `id` | `200` same shape as above, `404` unknown or expired |
+| `GET /api/v1/uploads/{id}/problems` | **One page of a checked file's problem rows**, in row order. Pass `next_after` back as `after` for the next page | Query: `kind` (comma separated; default every skipped kind; `unverified` allowed), `q` (name/email), `after` (row number), `limit` (default 100, max 500) | `200 {"items":[{"row":4,"name":"...","email":"...","kind":"bad_domain","reason":"..."}],"next_after":616}` (`null` on the last page) |
+| `GET /api/v1/uploads/{id}/sample` | **First rows that will be sent**, for the email preview | Query: `limit` (default 5, max 20) | `200 {"items":[{"row":2,"name":"...","email":"...","kind":"ok"}]}` |
+| `POST /api/v1/batches` | **Queue background email campaign** (the file is checked again; the rows are not returned, the job list shows them) | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`), `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4,"unverified_count":0}` |
 | `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":38,"invalid":4,"created_at":"...","completed_at":"..."}` |
-| `GET /api/v1/batches/{id}/jobs` | **List jobs for a batch (filter by status)** | Query: `?status=invalid` | `200 [{"id":4,"recipient_email":"...","status":"invalid","last_error":"..."}]` |
 | `GET /api/v1/batches` | **List batches with job counts** | Query: `status`, `q` (filename), `limit` (default 20, max 100), `offset` | `200 {"items":[{"id":1,"filename":"...","status":"completed","total":42,"sent":38,"failed":0,"invalid":4}],"total":1,"limit":20,"offset":0}` |
-| `GET /api/v1/batches/{id}/jobs?limit=` | **Paged job list** (adding `limit`, `offset` or `q` switches to the paged form) | Query: `status`, `q` (email/name), `limit`, `offset` | `200 {"items":[...],"total":42,"limit":20,"offset":0}` |
+| `GET /api/v1/batches/{id}/jobs` | **Paged job list** (always paged) | Query: `status`, `q` (email/name), `limit` (default 20, max 100), `offset` | `200 {"items":[{"id":4,"recipient_email":"...","status":"invalid","last_error":"..."}],"total":42,"limit":20,"offset":0}` |
 | `POST /api/v1/batches/{id}/retry` | **Requeue all failed jobs in a batch** (invalid and cancelled rows are skipped) | none | `200 {"retried":3}`, `409` if the batch was cancelled |
 | `POST /api/v1/batches/{id}/cancel` | **Stop a batch that is still sending.** Unsent (`pending`) emails become `cancelled` and are never sent or retried; an email being sent right now finishes | none | `200 {"cancelled":630036}`, `404`, `409` if the batch already finished or was cancelled |
 | `POST /api/v1/jobs/{id}/retry` | **Requeue one failed job** | none | `200 {"retried":1}`, `404` if not failed |
@@ -139,7 +143,7 @@ level=INFO  msg="batch created" batch_id=1 filename=9_mixed_everything.xlsx pend
 level=INFO  msg=request req_id=6ecc38cf method=POST path=/api/v1/batches status=202 duration=5ms
 level=DEBUG msg="email sent" job_id=1 batch_id=1 to=a***@example.com worker=4 send=3ms queued=4ms
 level=INFO  msg="batch completed" batch_id=1 filename=9_mixed_everything.xlsx sent=3 failed=0 invalid=5 duration=16ms rate=191.1/s
-level=WARN  msg=request req_id=e2da5ecd method=POST path=/api/v1/recipients/parse status=413 duration=30ms
+level=WARN  msg=request req_id=e2da5ecd method=POST path=/api/v1/uploads status=413 duration=30ms
 ```
 
 - **Request log:** one line per API call (not `/healthz`). 5xx is ERROR, 4xx WARN; successful POST/PUT/DELETE are INFO; successful GET/HEAD and CORS preflights are DEBUG (the dashboard polls every few seconds). The same `req_id` is returned in the `X-Request-ID` response header, so a failed request seen in the browser can be found in the log.

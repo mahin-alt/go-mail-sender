@@ -6,6 +6,7 @@ Numbers to compare before and after a performance change, measured with the
 | Folder | Code | What it is |
 |---|---|---|
 | [2026-11-08-baseline/](2026-11-08-baseline/results.md) | tag `bench/baseline-2026-11-08` | before the large-upload scaling work |
+| [2026-11-08-phase1/](2026-11-08-phase1/results.md) | branch `feat/upload-check-storage` | large-upload Phase 1: `POST /uploads`, paged problems, streaming parser |
 
 Each folder holds `results.md` (the summary to read), `env.txt` (machine and
 settings), `go-bench.txt` (raw Go benchmark output, for benchstat) and the
@@ -16,7 +17,7 @@ server logs of each step.
 | Part | How | Numbers |
 |---|---|---|
 | Parser (`recipients.ParseExcelReader`) | Go benchmark, 6 runs | time, memory allocated (`B/op`), allocations, **peak heap MB** |
-| `POST /recipients/parse` | fresh API process, 3 runs | total time, response size, **server peak memory** (Linux `VmHWM`), parse step time |
+| Check a file: `POST /uploads` (`POST /recipients/parse` in the baseline) | fresh API process, 3 runs | total time, response size, **server peak memory** (Linux `VmHWM`), server time |
 | `POST /batches` | fresh API process | total time, response size, server peak memory, parse / render / insert step times, database size |
 | Workers | count emails handled in 60 s | emails per second |
 | `POST /batches/{id}/cancel` | once, on the 1M batch | time |
@@ -56,6 +57,11 @@ BENCH_XLSX=$PWD/samples/12_million_mixed.xlsx \
 - `-run '^$'` runs no normal tests, only benchmarks
 - `-benchtime 1x` parses the file once per run (one parse takes several seconds)
 - `-count 6` repeats it 6 times, so benchstat can tell a real change from noise
+
+Worker speed (emails/s) and the batch read endpoints vary a lot between runs on
+a busy laptop (475 to 16 emails/s with identical code on 2026-11-08): run them
+several times before drawing conclusions. `BENCH_LOG_LEVEL=debug` makes the
+server log every email's SMTP time, which tells SMTP and database time apart.
 
 If a run is interrupted, the scratch schema may be left behind and the next run
 refuses to start; drop it with

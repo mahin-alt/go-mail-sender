@@ -15,7 +15,7 @@
 #   - the API on 127.0.0.1:8095, built to bin/bench-server
 #
 # Environment knobs: BENCH_SKIP_GO=1, BENCH_SKIP_E2E=1, GO_BENCH_COUNT (6),
-# PARSE_RUNS (3), READ_RUNS (20), WORKER_SECONDS (60), WORKERS (5).
+# PARSE_RUNS (3), READ_RUNS (20), WORKER_SECONDS (60), WORKERS (5), BENCH_LOG_LEVEL (info).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -104,7 +104,7 @@ start_server() {
 	DATABASE_URL="$BENCH_DB_URL" HTTP_ADDR="$API_ADDR" \
 		SMTP_HOST=127.0.0.1 SMTP_PORT=${SMTP_ADDR##*:} SMTP_USERNAME= SMTP_PASSWORD= \
 		WORKER_COUNT=$WORKERS SMTP_POOL_SIZE=$WORKERS DOMAIN_CHECK_ENABLED=false MAX_UPLOAD_MB=40 \
-		LOG_FILE= LOG_FORMAT=json LOG_LEVEL=info \
+		LOG_FILE= LOG_FORMAT=json LOG_LEVEL=${BENCH_LOG_LEVEL:-info} \
 		bin/bench-server >"$OUT/server-$1.log" 2>&1 &
 	SERVER_PID=$!
 	for _ in $(seq 120); do
@@ -149,27 +149,34 @@ RESULTS="$OUT/results.md"
 	fi
 } >"$RESULTS"
 
-# --- 1. POST /recipients/parse -------------------------------------------
-log "POST /recipients/parse x$PARSE_RUNS (fresh server each time)"
+# --- 1. Check a file ----------------------------------------------------
+# The check endpoint: POST /uploads since the large-upload Phase 1, before that
+# POST /recipients/parse (the baseline). Whichever this code has is measured.
+if grep -q '"POST /api/v1/uploads"' internal/api/routes.go; then
+	CHECK_PATH=/api/v1/uploads CHECK_MSG='upload checked' CHECK_TIME=total
+else
+	CHECK_PATH=/api/v1/recipients/parse CHECK_MSG='recipients parsed' CHECK_TIME=parse
+fi
+log "POST $CHECK_PATH x$PARSE_RUNS (fresh server each time)"
 {
 	echo
-	echo "## POST /api/v1/recipients/parse"
+	echo "## POST $CHECK_PATH"
 	echo
-	echo "| run | status | total (s) | response (MB) | server peak memory (MB) | idle memory before (MB) | parse step (s) | valid | problems |"
+	echo "| run | status | total (s) | response (MB) | server peak memory (MB) | idle memory before (MB) | server time (s) | valid | problems |"
 	echo "|---|---|---|---|---|---|---|---|---|"
 } >>"$RESULTS"
 for run in $(seq "$PARSE_RUNS"); do
 	start_server "parse-$run"
 	idle=$(peak_mb)
 	read -r code total size < <(curl -s -o /dev/null -w '%{http_code} %{time_total} %{size_download}\n' \
-		-F "file=@$FILE" "$API/api/v1/recipients/parse")
+		-F "file=@$FILE" "$API$CHECK_PATH")
 	peak=$(peak_mb)
 	sleep 0.5 # let the log line land
 	L="$OUT/server-parse-$run.log"
-	printf '| %s | %s | %.2f | %.1f | %s | %s | %s | %s | %s |\n' "$run" "$code" "$total" \
+	printf '| %s | %s | %.2f | %.3f | %s | %s | %s | %s | %s |\n' "$run" "$code" "$total" \
 		"$(awk -v b="$size" 'BEGIN {print b / 1048576}')" "$peak" "$idle" \
-		"$(secs "$(log_field "$L" 'recipients parsed' parse)")" \
-		"$(log_field "$L" 'recipients parsed' valid)" "$(log_field "$L" 'recipients parsed' problems)" >>"$RESULTS"
+		"$(secs "$(log_field "$L" "$CHECK_MSG" "$CHECK_TIME")")" \
+		"$(log_field "$L" "$CHECK_MSG" valid)" "$(log_field "$L" "$CHECK_MSG" problems)" >>"$RESULTS"
 	stop_server
 done
 

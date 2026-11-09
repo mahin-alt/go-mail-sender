@@ -1,0 +1,17 @@
+{"time":"2026-11-08T19:37:10.544763422+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-08T19:37:10.54479554+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-08T19:37:10.547271126+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-08T19:37:10.581231403+06:00","level":"INFO","msg":"applied migration","file":"00001_create_batches_and_email_jobs.sql"}
+{"time":"2026-11-08T19:37:10.581255263+06:00","level":"INFO","msg":"applied migration","file":"00002_create_app_settings.sql"}
+{"time":"2026-11-08T19:37:10.581258962+06:00","level":"INFO","msg":"applied migration","file":"00003_add_stats_indexes.sql"}
+{"time":"2026-11-08T19:37:10.58126141+06:00","level":"INFO","msg":"applied migration","file":"00004_add_cancelled_status.sql"}
+{"time":"2026-11-08T19:37:10.581264455+06:00","level":"INFO","msg":"applied migration","file":"00005_add_uploads.sql"}
+{"time":"2026-11-08T19:37:10.581438169+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-08T19:37:10.581556337+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-08T19:37:21.483177662+06:00","level":"INFO","msg":"upload checked","upload_id":1,"filename":"12_million_mixed.xlsx","rows":950040,"valid":880533,"problems":69507,"unverified":0,"domain_check":0,"total":10397000000}
+{"time":"2026-11-08T19:37:21.483277143+06:00","level":"INFO","msg":"request","req_id":"24a18bae","method":"POST","path":"/api/v1/uploads","status":201,"duration":10397000000}
+{"time":"2026-11-08T19:37:22.021952267+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-08T19:37:22.022119374+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-08T19:37:22.02217871+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-08T19:37:22.022213183+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-08T19:37:22.022227013+06:00","level":"INFO","msg":"graceful shutdown complete"}

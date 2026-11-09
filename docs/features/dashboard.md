@@ -30,7 +30,7 @@ MONITOR  Failures | Recipients | Activity Log
 Settings
 ```
 - **Overview:** tiles (sent today, failed today, queued, in progress), 14-day chart, needs-attention list. Data: `GET /api/v1/stats`.
-- **New Bulk Email (wizard):** upload `.xlsx` -> data-quality report (`POST /recipients/parse`) -> compose with `{{.Name}}`/`{{.Email}}` chips and live preview -> review -> send (`POST /batches`).
+- **New Bulk Email (wizard):** upload `.xlsx` -> data-quality report (`POST /uploads`, problems paged from `GET /uploads/{id}/problems`; `POST /recipients/parse` until 2026-11-08) -> compose with `{{.Name}}`/`{{.Email}}` chips and live preview -> review -> send (`POST /batches`).
 - **All Bulk Emails / Detail:** `GET /batches`; detail shows counts, a jobs table (`/batches/{id}/jobs?limit=`), Retry failed.
 - **Verify Emails:** parse-only report.
 - **Failures:** cross-batch failed jobs grouped by reason, bulk retry (**endpoint not built yet**).
