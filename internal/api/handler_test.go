@@ -3,9 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +13,6 @@ import (
 	"testing"
 
 	"sendmail/internal/domaincheck"
-	"sendmail/internal/logging"
 )
 
 // fakeMailer satisfies mailer.Mailer without touching the network.
@@ -105,47 +102,6 @@ func postFileTo(h *Handler, route, path, filename, fieldName string) *httptest.R
 	return rec
 }
 
-func TestParseRecipients(t *testing.T) {
-	t.Run("valid file", func(t *testing.T) {
-		rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "1_valid.xlsx"), "1_valid.xlsx", "file")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body)
-		}
-
-		var resp parseRecipientsResponse
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
-		}
-		if len(resp.Valid) != 5 {
-			t.Errorf("valid = %d, want 5", len(resp.Valid))
-		}
-		if len(resp.Problems) != 0 {
-			t.Errorf("problems = %d, want 0", len(resp.Problems))
-		}
-	})
-
-	t.Run("missing form field", func(t *testing.T) {
-		rec := postFile("/api/v1/recipients/parse", "", "", "")
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want 400", rec.Code)
-		}
-	})
-
-	t.Run("unsupported file extension", func(t *testing.T) {
-		rec := postFile("/api/v1/recipients/parse", "", "test.csv", "file")
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want 400", rec.Code)
-		}
-	})
-
-	t.Run("wrong headers", func(t *testing.T) {
-		rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "7_wrong_headers.xlsx"), "7_wrong_headers.xlsx", "file")
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want 400 (body: %s)", rec.Code, rec.Body)
-		}
-	})
-}
-
 // fakeDomains satisfies DomainChecker with canned answers per domain
 // (anything not listed is Valid), so no DNS is needed.
 type fakeDomains map[string]domaincheck.Result
@@ -155,57 +111,6 @@ func (f fakeDomains) Check(_ context.Context, domain string) domaincheck.Result 
 		return r
 	}
 	return domaincheck.Result{Status: domaincheck.Valid}
-}
-
-func TestParseRecipientsDomainCheck(t *testing.T) {
-	sample := filepath.Join("..", "..", "samples", "11_domain_check.xlsx")
-	checker := fakeDomains{
-		"nonexistent.invalid": {Status: domaincheck.Invalid, Reason: "domain nonexistent.invalid does not exist or has no mail server"},
-		"example.com":         {Status: domaincheck.Invalid, Reason: "domain example.com does not accept mail"},
-		"yahoo.com":           {Status: domaincheck.Unknown, Reason: "could not verify domain yahoo.com: timeout"},
-	}
-
-	parse := func(t *testing.T, h *Handler) parseRecipientsResponse {
-		t.Helper()
-		rec := postFileTo(h, "/api/v1/recipients/parse", sample, "11_domain_check.xlsx", "file")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body)
-		}
-		var resp parseRecipientsResponse
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		return resp
-	}
-
-	t.Run("dead domains rejected, unknown kept and reported", func(t *testing.T) {
-		resp := parse(t, NewHandler(&fakeMailer{}, nil, nil).WithDomainChecker(checker))
-
-		if len(resp.Problems) != 2 {
-			t.Fatalf("problems = %d, want 2 (%+v)", len(resp.Problems), resp.Problems)
-		}
-		for _, p := range resp.Problems {
-			if p.Row < 2 || p.Reason == "" {
-				t.Errorf("problem should carry its row and reason: %+v", p)
-			}
-		}
-		if resp.Problems[0].Row > resp.Problems[1].Row {
-			t.Errorf("problems should be in row order: %+v", resp.Problems)
-		}
-		if len(resp.Valid) != 6 {
-			t.Errorf("valid = %d, want 6", len(resp.Valid))
-		}
-		if resp.UnverifiedCount != 1 || len(resp.Unverified) != 1 || resp.Unverified[0].Email != "carla@yahoo.com" {
-			t.Errorf("unverified = %d %+v, want just carla@yahoo.com", resp.UnverifiedCount, resp.Unverified)
-		}
-	})
-
-	t.Run("no checker configured leaves everything valid", func(t *testing.T) {
-		resp := parse(t, NewHandler(&fakeMailer{}, nil, nil))
-		if len(resp.Valid) != 8 || len(resp.Problems) != 0 || resp.UnverifiedCount != 0 {
-			t.Errorf("valid=%d problems=%d unverified=%d, want 8/0/0", len(resp.Valid), len(resp.Problems), resp.UnverifiedCount)
-		}
-	})
 }
 
 // postBytes uploads data as the "file" field of a multipart form.
@@ -225,17 +130,17 @@ func postBytes(h *Handler, route, filename string, data []byte) *httptest.Respon
 
 func TestUploadSizeLimit(t *testing.T) {
 	const mb = 1 << 20
-	route := "/api/v1/recipients/parse"
+	route := "/api/v1/uploads"
 
 	t.Run("default is 10 MB", func(t *testing.T) {
-		rec := postBytes(NewHandler(&fakeMailer{}, nil, nil), route, "big.xlsx", make([]byte, 10*mb+1))
+		rec := postBytes(newUploadHandler(), route, "big.xlsx", make([]byte, 10*mb+1))
 		if rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "10 MB") {
 			t.Fatalf("status = %d body = %s, want 413 naming 10 MB", rec.Code, rec.Body)
 		}
 	})
 
 	t.Run("a file exactly at the limit is not rejected for size", func(t *testing.T) {
-		h := NewHandler(&fakeMailer{}, nil, nil)
+		h := newUploadHandler()
 		h.SetMaxUploadMB(1)
 		// Not a real spreadsheet, so it gets past the size check and fails parsing.
 		if rec := postBytes(h, route, "edge.xlsx", make([]byte, mb)); rec.Code != http.StatusBadRequest {
@@ -244,7 +149,7 @@ func TestUploadSizeLimit(t *testing.T) {
 	})
 
 	t.Run("changes apply at runtime without a new handler", func(t *testing.T) {
-		h := NewHandler(&fakeMailer{}, nil, nil)
+		h := newUploadHandler()
 		twoMB := make([]byte, 2*mb)
 
 		h.SetMaxUploadMB(1)
@@ -264,29 +169,11 @@ func TestUploadSizeLimit(t *testing.T) {
 	})
 
 	t.Run("real spreadsheet under a raised limit parses", func(t *testing.T) {
-		h := NewHandler(&fakeMailer{}, nil, nil)
+		h := newUploadHandler()
 		h.SetMaxUploadMB(40)
 		rec := postFileTo(h, route, filepath.Join("..", "..", "samples", "1_valid.xlsx"), "1_valid.xlsx", "file")
-		if rec.Code != http.StatusOK {
+		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
 		}
 	})
-}
-
-func TestParseRecipients_LogsStageTimings(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(logging.New(&buf, slog.LevelInfo, "text"))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	rec := postFile("/api/v1/recipients/parse", filepath.Join("..", "..", "samples", "9_mixed_everything.xlsx"), "9_mixed_everything.xlsx", "file")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
-	}
-	line := buf.String()
-	for _, part := range []string{`msg="recipients parsed"`, "valid=3", "problems=5", "parse=", "domain_check=", "total="} {
-		if !strings.Contains(line, part) {
-			t.Errorf("log line missing %q:\n%s", part, line)
-		}
-	}
 }

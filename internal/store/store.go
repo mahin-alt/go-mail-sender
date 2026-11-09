@@ -468,55 +468,6 @@ func (s *Store) GetBatchProgress(ctx context.Context, batchID int64) (*BatchProg
 	return &bp, nil
 }
 
-// GetBatchJobs retrieves jobs for a given batch, optionally filtered by status (e.g. "invalid").
-func (s *Store) GetBatchJobs(ctx context.Context, batchID int64, statusFilter string) ([]Job, error) {
-	query := `
-		SELECT id, batch_id, recipient_name, recipient_email, subject, body,
-		       status, attempts, max_attempts, last_error, locked_at, run_at,
-		       created_at, updated_at, sent_at
-		FROM email_jobs
-		WHERE batch_id = $1
-		  AND ($2 = '' OR status = $2)
-		ORDER BY id ASC
-	`
-	rows, err := s.db.QueryContext(ctx, query, batchID, statusFilter)
-	if err != nil {
-		return nil, fmt.Errorf("query batch jobs: %w", err)
-	}
-	defer rows.Close()
-
-	var jobs []Job
-	for rows.Next() {
-		var j Job
-		if err := rows.Scan(
-			&j.ID,
-			&j.BatchID,
-			&j.RecipientName,
-			&j.RecipientEmail,
-			&j.Subject,
-			&j.Body,
-			&j.Status,
-			&j.Attempts,
-			&j.MaxAttempts,
-			&j.LastError,
-			&j.LockedAt,
-			&j.RunAt,
-			&j.CreatedAt,
-			&j.UpdatedAt,
-			&j.SentAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan job row: %w", err)
-		}
-		jobs = append(jobs, j)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
-	}
-
-	return jobs, nil
-}
-
 // ListBatches returns one page of batches (newest first) with their job counts,
 // plus the total number of batches matching the filter (for pagination).
 func (s *Store) ListBatches(ctx context.Context, f BatchListFilter) ([]BatchSummary, int, error) {

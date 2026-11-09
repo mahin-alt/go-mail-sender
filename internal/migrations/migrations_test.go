@@ -99,7 +99,7 @@ func TestUpDownUp(t *testing.T) {
 	if err != nil || len(res) != len(p.ListSources()) {
 		t.Fatalf("Up applied %d of %d: %v", len(res), len(p.ListSources()), err)
 	}
-	if got := tables(t, db); got != "app_settings,batches,email_jobs" {
+	if got := tables(t, db); got != "app_settings,batches,email_jobs,upload_rows,uploads" {
 		t.Fatalf("tables after Up = %q", got)
 	}
 	if again, err := Up(ctx, db); err != nil || len(again) != 0 {

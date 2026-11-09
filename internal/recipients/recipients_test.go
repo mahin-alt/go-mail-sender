@@ -94,3 +94,71 @@ func TestParseExcelReader(t *testing.T) {
 	}
 }
 
+
+// TestScanKinds checks the kind and row number Scan reports for every row of
+// the "everything wrong" sample, including the row numbers after a blank row.
+func TestScanKinds(t *testing.T) {
+	f, err := os.Open(filepath.Join("..", "..", "samples", "9_mixed_everything.xlsx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	type got struct {
+		Num  int
+		Kind Kind
+	}
+	var rows []got
+	if err := Scan(f, func(r Row) error {
+		if r.Kind != KindOK && r.Reason == "" {
+			t.Errorf("row %d (%s) has no reason", r.Num, r.Kind)
+		}
+		rows = append(rows, got{r.Num, r.Kind})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []got{
+		{2, KindOK}, {3, KindEmptyEmail}, {4, KindInvalidEmail}, {5, KindEmptyName},
+		{6, KindOK}, {8, KindDuplicate}, {9, KindInvalidEmail}, {10, KindOK}, // row 7 is blank
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("got %d rows %+v, want %d", len(rows), rows, len(want))
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Errorf("row %d: got %+v, want %+v", i, rows[i], want[i])
+		}
+	}
+}
+
+// TestScanStopsOnCallbackError checks that an error from the callback (for
+// example a failed database write) stops the scan and is returned as is.
+func TestScanStopsOnCallbackError(t *testing.T) {
+	f, err := os.Open(filepath.Join("..", "..", "samples", "1_valid.xlsx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	stop := errors.New("stop")
+	calls := 0
+	err = Scan(f, func(Row) error { calls++; return stop })
+	if !errors.Is(err, stop) || calls != 1 {
+		t.Fatalf("err = %v after %d calls, want the callback's error after 1 call", err, calls)
+	}
+}
+
+func TestKindSendable(t *testing.T) {
+	for _, k := range []Kind{KindOK, KindUnverified} {
+		if !k.Sendable() {
+			t.Errorf("%s should be sendable", k)
+		}
+	}
+	for _, k := range SkippedKinds {
+		if k.Sendable() {
+			t.Errorf("%s should be skipped", k)
+		}
+	}
+}

@@ -17,8 +17,12 @@ func NewRouter(h *Handler) http.Handler {
 	// Single email delivery (synchronous)
 	mux.HandleFunc("POST /api/v1/emails", h.SendEmail)
 
-	// Excel parsing routes: accept an uploaded .xlsx file and return parsed recipients.
-	mux.HandleFunc("POST /api/v1/recipients/parse", h.ParseRecipients)
+	// Checked spreadsheets: upload a .xlsx once, get its totals, then page
+	// through its problems and fetch a few rows for the email preview.
+	mux.HandleFunc("POST /api/v1/uploads", h.CreateUpload)
+	mux.HandleFunc("GET /api/v1/uploads/{id}", h.GetUpload)
+	mux.HandleFunc("GET /api/v1/uploads/{id}/problems", h.ListUploadProblems)
+	mux.HandleFunc("GET /api/v1/uploads/{id}/sample", h.GetUploadSample)
 
 	// Background batch job routes: upload Excel + template, queue jobs in PostgreSQL,
 	// and query asynchronous progress.

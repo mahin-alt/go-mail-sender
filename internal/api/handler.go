@@ -64,6 +64,9 @@ type Handler struct {
 	maxUploadMB atomic.Int64
 
 	settings *settings.Service // nil = settings endpoints disabled
+
+	// uploads keeps checked spreadsheets (the database store; a fake in tests).
+	uploads UploadStore
 }
 
 // SetMaxUploadMB changes the upload size limit at runtime. Uploads already in
@@ -197,6 +200,9 @@ func NewHandler(m mailer.Mailer, st *store.Store, wp *worker.Pool) *Handler {
 		store:  st,
 		worker: wp,
 	}
+	if st != nil { // a nil *store.Store inside the interface would not compare equal to nil
+		h.uploads = st
+	}
 	h.maxUploadMB.Store(config.DefaultMaxUploadMB)
 	return h
 }
@@ -245,65 +251,19 @@ func (h *Handler) SendEmail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "email sent"})
 }
 
-// parseRecipientsResponse is the response shape for POST /api/v1/recipients/parse.
-type parseRecipientsResponse struct {
-	Valid           []recipients.Recipient `json:"valid"`
-	Problems        []recipients.RowError  `json:"problems"`
-	UnverifiedCount int                    `json:"unverified_count"`
-	Unverified      []recipients.RowError  `json:"unverified,omitempty"`
-}
-
-// ParseRecipients handles POST /api/v1/recipients/parse (preview parsed Excel recipients).
-func (h *Handler) ParseRecipients(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	file, _, ok := h.readUpload(w, r)
-	if !ok {
-		return
-	}
-	defer file.Close()
-
-	t := time.Now()
-	valid, problems, err := recipients.ParseExcelReader(file)
-	parseTime := time.Since(t)
-	if err != nil {
-		if errors.Is(err, recipients.ErrMissingColumns) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to parse excel file: %v", err))
-		return
-	}
-
-	t = time.Now()
-	valid, rejected, unverified := h.verifyDomains(r.Context(), valid)
-	domainTime := time.Since(t)
-	problems = mergeProblems(problems, rejected)
-
-	slog.Info("recipients parsed", "valid", len(valid), "problems", len(problems), "unverified", len(unverified),
-		"parse", ms(parseTime), "domain_check", ms(domainTime), "total", ms(time.Since(start)))
-
-	writeJSON(w, http.StatusOK, parseRecipientsResponse{
-		Valid:           valid,
-		Problems:        problems,
-		UnverifiedCount: len(unverified),
-		Unverified:      unverified,
-	})
-}
-
 // createBatchResponse is returned by POST /api/v1/batches.
 type createBatchResponse struct {
-	BatchID      int64                 `json:"batch_id"`
-	Filename     string                `json:"filename"`
-	TotalRows    int                   `json:"total_rows"`
-	ValidCount   int                   `json:"valid_count"`
-	InvalidCount int                   `json:"invalid_count"`
-	Status       string                `json:"status"`
-	Problems     []recipients.RowError `json:"problems,omitempty"`
+	BatchID      int64  `json:"batch_id"`
+	Filename     string `json:"filename"`
+	TotalRows    int    `json:"total_rows"`
+	ValidCount   int    `json:"valid_count"`
+	InvalidCount int    `json:"invalid_count"`
+	Status       string `json:"status"`
 	// UnverifiedCount counts valid rows whose domain lookup failed (e.g. DNS
-	// timeout). They are still queued; see Unverified for which ones.
-	UnverifiedCount int                   `json:"unverified_count"`
-	Unverified      []recipients.RowError `json:"unverified,omitempty"`
-	Message         string                `json:"message"`
+	// timeout). They are still queued. The rows themselves are not returned:
+	// the batch's job list shows them (invalid rows with their reason).
+	UnverifiedCount int    `json:"unverified_count"`
+	Message         string `json:"message"`
 }
 
 // CreateBatch handles POST /api/v1/batches:
@@ -450,9 +410,7 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		ValidCount:      len(validRecipients),
 		InvalidCount:    len(problems),
 		Status:          batchStatus,
-		Problems:        problems,
 		UnverifiedCount: len(unverified),
-		Unverified:      unverified,
 		Message:         "batch accepted; valid emails queued for delivery and invalid rows recorded",
 	})
 }
@@ -486,8 +444,10 @@ func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, progress)
 }
 
-// GetBatchJobs handles GET /api/v1/batches/{id}/jobs:
-// Lists jobs for a batch, optionally filtered by ?status=invalid (or pending/sent/failed).
+// GetBatchJobs handles GET /api/v1/batches/{id}/jobs: one page of a batch's
+// jobs, filtered by ?status= and ?q= (email or name), paged with ?limit=
+// (default 20, max 100) and ?offset=. Always paged: a batch can hold a
+// million jobs, far too many for one response.
 func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeError(w, http.StatusInternalServerError, "database store is not configured")
@@ -502,43 +462,22 @@ func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	statusFilter := strings.TrimSpace(q.Get("status"))
-
-	// Paged mode: if any paging/search parameter is present, return the paged
-	// envelope (with a total) used by the dashboard. Without them the original
-	// plain-array response is kept so existing callers keep working.
-	if q.Has("limit") || q.Has("offset") || q.Has("q") {
-		limit, offset, ok := parsePaging(w, q)
-		if !ok {
-			return
-		}
-		jobs, total, err := h.store.ListBatchJobs(r.Context(), batchID, store.JobListFilter{
-			Status: statusFilter,
-			Search: strings.TrimSpace(q.Get("q")),
-			Limit:  limit,
-			Offset: offset,
-		})
-		if err != nil {
-			slog.Error("list batch jobs failed", "batch_id", batchID, "err", err)
-			writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
-			return
-		}
-		writeJSON(w, http.StatusOK, jobListResponse{Items: jobs, Total: total, Limit: limit, Offset: offset})
+	limit, offset, ok := parsePaging(w, q)
+	if !ok {
 		return
 	}
-
-	jobs, err := h.store.GetBatchJobs(r.Context(), batchID, statusFilter)
+	jobs, total, err := h.store.ListBatchJobs(r.Context(), batchID, store.JobListFilter{
+		Status: strings.TrimSpace(q.Get("status")),
+		Search: strings.TrimSpace(q.Get("q")),
+		Limit:  limit,
+		Offset: offset,
+	})
 	if err != nil {
-		slog.Error("get batch jobs failed", "batch_id", batchID, "err", err)
+		slog.Error("list batch jobs failed", "batch_id", batchID, "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
 		return
 	}
-
-	if jobs == nil {
-		jobs = []store.Job{}
-	}
-
-	writeJSON(w, http.StatusOK, jobs)
+	writeJSON(w, http.StatusOK, jobListResponse{Items: jobs, Total: total, Limit: limit, Offset: offset})
 }
 
 func validateEmailReq(req sendEmailRequest) string {
@@ -619,7 +558,7 @@ func (h *Handler) ListBatches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, batchListResponse{Items: items, Total: total, Limit: limit, Offset: offset})
 }
 
-// jobListResponse is the paged envelope returned by GetBatchJobs in paged mode.
+// jobListResponse is the paged envelope returned by GetBatchJobs.
 type jobListResponse struct {
 	Items  []store.Job `json:"items"`
 	Total  int         `json:"total"`

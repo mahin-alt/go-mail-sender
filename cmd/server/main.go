@@ -144,6 +144,9 @@ func main() {
 
 	workerPool.Start(workerCtx)
 
+	// Checked spreadsheets expire after 24 hours; delete them (and their rows) hourly.
+	go cleanupExpiredUploads(workerCtx, st, time.Hour)
+
 	// 6. Build HTTP Handler & Router
 	handler = api.NewHandler(smtpPool, st, workerPool)
 	// The checker is always installed so the Settings page can switch it on and
@@ -205,6 +208,26 @@ func main() {
 	}
 
 	slog.Info("graceful shutdown complete")
+}
+
+// cleanupExpiredUploads deletes expired uploads every interval until ctx ends.
+func cleanupExpiredUploads(ctx context.Context, st *store.Store, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		n, err := st.DeleteExpiredUploads(ctx)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			slog.Error("delete expired uploads failed", "err", err)
+		case n > 0:
+			slog.Info("expired uploads deleted", "count", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // fatal logs an error and exits, like log.Fatalf but through the structured
