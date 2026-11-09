@@ -1,0 +1,841 @@
+{
+  "info": {
+    "name": "MailFlow (go-mail-sender) API",
+    "description": "Every endpoint of the go-mail-sender API (see the API table in README.md).\n\n1. Set `baseUrl` (default http://localhost:8080). File uploads use `samples/9_mixed_everything.xlsx`: in Postman, Settings -> General -> Working directory, choose the repository folder, or pick a file again in the request's Body tab.\n2. Requests that create something save their id (`upload_id`, `batch_id`, `job_id`, `next_after`) for the requests after them.\n3. Requests marked **really sends** send email through the configured SMTP server.\n\nErrors are JSON: `{\"error\": \"message\"}`. There is no login yet.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "upload_id",
+      "value": ""
+    },
+    {
+      "key": "next_after",
+      "value": ""
+    },
+    {
+      "key": "batch_id",
+      "value": ""
+    },
+    {
+      "key": "job_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "Reports that the server process is up. Answer: `200 {\"status\":\"ok\"}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Single email",
+      "item": [
+        {
+          "name": "Send one email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/emails",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "emails"
+              ]
+            },
+            "description": "Sends one email right away (not queued) through the configured SMTP server. **This really sends**: change `to` first. Answer: `200 {\"message\":\"email sent\"}`, `400` for invalid input, `502` when SMTP fails.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"you@example.com\",\n  \"subject\": \"Hello from MailFlow\",\n  \"body\": \"This is a test email.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checked files (uploads)",
+      "description": "Check a spreadsheet without sending anything. The server reads it row by row, keeps every row for 24 hours with its kind, and answers with totals only. Problems and preview rows are fetched separately, a page at a time.\n\nKinds: `ok` and `unverified` (sent), `empty_email`, `empty_name`, `invalid_email`, `duplicate`, `bad_domain` (skipped).\n\nRun **Check a spreadsheet** first: it saves `upload_id` for the other requests in this folder.",
+      "item": [
+        {
+          "name": "Check a spreadsheet",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads"
+              ]
+            },
+            "description": "Uploads and checks a file. Answer: `201` with `upload_id`, `total_rows`, `valid_count` (ok + unverified), `problem_count`, `unverified_count`, `problem_counts` per skipped kind and `expires_at`. Never the rows. `400` for a bad file or missing columns, `413` over the size limit.\n\nThe test script saves `upload_id` as a collection variable.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "samples/9_mixed_everything.xlsx",
+                  "description": "A .xlsx file: first sheet, header row with \"name\" and \"email\". Up to MAX_UPLOAD_MB (default 10 MB). If Postman cannot find it, pick the file again here."
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const up = pm.response.json();",
+                  "pm.test('has an upload_id and totals only', () => {",
+                  "  pm.expect(up.upload_id).to.be.a('number');",
+                  "  pm.expect(up).to.not.have.property('valid');",
+                  "});",
+                  "pm.collectionVariables.set('upload_id', up.upload_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get totals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads/{{upload_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}"
+              ]
+            },
+            "description": "The totals of a checked file (same shape as the check's answer). `404` when unknown or expired (kept 24 hours)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List problems (first page)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads/{{upload_id}}/problems?limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}",
+                "problems"
+              ],
+              "query": [
+                {
+                  "key": "kind",
+                  "value": "",
+                  "description": "Comma separated kinds, e.g. duplicate or empty_email,empty_name,invalid_email. Empty: every skipped kind. unverified is allowed too.",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Search in name and email (case-insensitive).",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Rows per page, 1-500 (default 100)."
+                }
+              ]
+            },
+            "description": "One page of problem rows in spreadsheet order: `{\"items\":[{\"row\",\"name\",\"email\",\"kind\",\"reason\"}],\"next_after\":616}`. `next_after` is `null` on the last page. The test script saves it as `next_after` for **List problems (next page)**."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const page = pm.response.json();",
+                  "pm.collectionVariables.set('next_after', page.next_after ?? '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List problems (next page)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads/{{upload_id}}/problems?after={{next_after}}&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}",
+                "problems"
+              ],
+              "query": [
+                {
+                  "key": "after",
+                  "value": "{{next_after}}",
+                  "description": "Spreadsheet row to continue after (the previous next_after)."
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Rows per page, 1-500."
+                }
+              ]
+            },
+            "description": "The page after the previous one: `after` is the `next_after` of the last answer (rows after that spreadsheet row). Keyset paging: deep pages are as fast as the first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const page = pm.response.json();",
+                  "pm.collectionVariables.set('next_after', page.next_after ?? '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List one tab (Invalid)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads/{{upload_id}}/problems?kind=empty_email,empty_name,invalid_email&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}",
+                "problems"
+              ],
+              "query": [
+                {
+                  "key": "kind",
+                  "value": "empty_email,empty_name,invalid_email",
+                  "description": "Comma separated kinds."
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "The rows behind the Invalid tab of Verify Emails: three kinds at once."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search problems",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads/{{upload_id}}/problems?q=aisha&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}",
+                "problems"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "aisha",
+                  "description": "Up to 200 characters."
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Problem rows whose name or email contains the text."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview sample",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/uploads/{{upload_id}}/sample?limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}",
+                "sample"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "1-20 (default 5)."
+                }
+              ]
+            },
+            "description": "The first rows that will be sent, for the email preview: `{\"items\":[{\"row\",\"name\",\"email\",\"kind\"}]}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bulk Emails (batches)",
+      "description": "A Bulk Email is called a batch in the API. **Queue a Bulk Email really sends** to every valid row of the file (through the configured SMTP server); use Mailpit or a test file.\n\nRun **Queue a Bulk Email** first: it saves `batch_id`.",
+      "item": [
+        {
+          "name": "Queue a Bulk Email",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/batches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches"
+              ]
+            },
+            "description": "Uploads a file with a subject and body template, saves one job per row and starts sending in the background. Templates can use `{{.Name}}` and `{{.Email}}`. Answer: `202 {\"batch_id\",\"filename\",\"total_rows\",\"valid_count\",\"invalid_count\",\"unverified_count\",\"status\",\"message\"}`; problem rows are not returned (see the job list). The test script saves `batch_id`.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "samples/9_mixed_everything.xlsx",
+                  "description": "A .xlsx file: first sheet, header row with \"name\" and \"email\". Up to MAX_UPLOAD_MB (default 10 MB). If Postman cannot find it, pick the file again here."
+                },
+                {
+                  "key": "subject",
+                  "value": "Update on your order, {{.Name}}",
+                  "type": "text",
+                  "description": "Subject template. Default: Hello {{.Name}}"
+                },
+                {
+                  "key": "body",
+                  "value": "Hello {{.Name}},\n\nYour order has been updated.",
+                  "type": "text",
+                  "description": "Body template."
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('batch_id', b.batch_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Bulk Emails",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/batches?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "pending, processing, completed or cancelled.",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Part of the filename.",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1-100 (default 20)."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Newest first, with job counts per status: `{\"items\":[...],\"total\",\"limit\",\"offset\"}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/batches/{{batch_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches",
+                "{{batch_id}}"
+              ]
+            },
+            "description": "Status and counts: sent, failed, pending, processing, invalid, cancelled. `404` for an unknown id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/batches/{{batch_id}}/jobs?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches",
+                "{{batch_id}}",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "pending, processing, sent, failed, invalid or cancelled.",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Part of the email or name.",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1-100 (default 20)."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "One page of a batch's jobs (always paged): `{\"items\":[...],\"total\",\"limit\",\"offset\"}`. The test script saves the first job's id as `job_id`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const page = pm.response.json();",
+                  "if (page.items.length) pm.collectionVariables.set('job_id', page.items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retry failed emails",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/batches/{{batch_id}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches",
+                "{{batch_id}}",
+                "retry"
+              ]
+            },
+            "description": "Puts every `failed` job back in the queue (invalid and cancelled rows are skipped). Answer: `200 {\"retried\":3}`, `409` if the batch was cancelled."
+          }
+        },
+        {
+          "name": "Cancel (stop sending)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/batches/{{batch_id}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches",
+                "{{batch_id}}",
+                "cancel"
+              ]
+            },
+            "description": "Stops a batch that is still sending: pending emails become `cancelled` and are never sent; an email being sent right now finishes. Answer: `200 {\"cancelled\":630036}`, `404`, `409` if it already finished or was cancelled."
+          }
+        },
+        {
+          "name": "Retry one email",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/jobs/{{job_id}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "{{job_id}}",
+                "retry"
+              ]
+            },
+            "description": "Puts one `failed` job back in the queue. Answer: `200 {\"retried\":1}`, `404` if it is not failed. Set `job_id` to a failed job (List jobs with status=failed)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Overview numbers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/stats?days=14&tz=Asia/Dhaka",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "14",
+                  "description": "1-90 (default 14)."
+                },
+                {
+                  "key": "tz",
+                  "value": "Asia/Dhaka",
+                  "description": "IANA time zone for \"today\" (default UTC)."
+                }
+              ]
+            },
+            "description": "Today's sent and failed, the queue, a daily series and the batches that need attention."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "description": "Runtime settings. Secrets (SMTP password) are never returned.",
+      "item": [
+        {
+          "name": "List settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "Every editable setting with its value, source (env or override), how it applies (instant, restart, readonly) and whether a restart is pending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings"
+              ]
+            },
+            "description": "All-or-nothing. `values` sets, `reset` goes back to the .env value. Changing SMTP settings first opens a real connection and refuses the save if it fails. Example: raise the upload limit to 40 MB.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"values\": {\n    \"MAX_UPLOAD_MB\": \"40\"\n  },\n  \"reset\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send a test email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/smtp/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "smtp",
+                "test"
+              ]
+            },
+            "description": "Sends a real test email over a fresh SMTP connection. Fields you leave out use the current settings, so unsaved values can be tried first. **This really sends**: change `to`. Answer: `200`, or `502` with the SMTP reason.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"you@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
