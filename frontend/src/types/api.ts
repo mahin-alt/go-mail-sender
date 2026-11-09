@@ -86,26 +86,49 @@ export interface RetryResult {
   retried: number
 }
 
-/** One spreadsheet row that was rejected, from POST /recipients/parse. */
-export interface RowProblem {
-  row: number
-  name?: string
-  email?: string
-  reason: string
+/** What the check found for one spreadsheet row. `ok` and `unverified` rows are sent; the rest are skipped. */
+export type RowKind =
+  | 'ok'
+  | 'unverified'
+  | 'empty_email'
+  | 'empty_name'
+  | 'invalid_email'
+  | 'duplicate'
+  | 'bad_domain'
+
+/** Kinds that are skipped (never sent). */
+export type SkippedKind = Exclude<RowKind, 'ok' | 'unverified'>
+
+/** POST /uploads (201) and GET /uploads/{id}: a checked spreadsheet's totals. Never the rows. */
+export interface UploadSummary {
+  upload_id: number
+  filename: string
+  status: 'importing' | 'ready' | 'failed'
+  total_rows: number
+  /** Rows that will be sent: ok + unverified. */
+  valid_count: number
+  /** Rows that will be skipped. */
+  problem_count: number
+  /** Sent, but the domain could not be checked. */
+  unverified_count: number
+  problem_counts: Record<SkippedKind, number>
+  created_at: string
+  expires_at: string
 }
 
-export interface Recipient {
+/** One stored spreadsheet row, from GET /uploads/{id}/problems and /sample. */
+export interface UploadRow {
+  row: number
   name: string
   email: string
-  row: number
+  kind: RowKind
+  reason?: string
 }
 
-/** POST /recipients/parse */
-export interface ParseResult {
-  valid: Recipient[]
-  problems: RowProblem[]
-  unverified_count: number
-  unverified?: RowProblem[]
+/** GET /uploads/{id}/problems: one page; send `next_after` as `after` for the next one. */
+export interface ProblemPage {
+  items: UploadRow[]
+  next_after: number | null
 }
 
 /** POST /batches (202) */
@@ -116,9 +139,7 @@ export interface CreateBatchResult {
   valid_count: number
   invalid_count: number
   status: string
-  problems?: RowProblem[]
   unverified_count: number
-  unverified?: RowProblem[]
   message: string
 }
 

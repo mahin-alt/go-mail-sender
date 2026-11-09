@@ -1,18 +1,8 @@
 import { http } from './client'
-import type { CreateBatchResult, ParseResult } from '@/types/api'
+import type { CreateBatchResult } from '@/types/api'
 
-/** Checking a big file looks up every recipient domain, which can take a while. */
+/** Sending a big file re-reads and saves every row, which can take a while. */
 const UPLOAD_TIMEOUT_MS = 120_000
-
-/** Check a spreadsheet without saving or sending anything. */
-export async function parseRecipients(file: File): Promise<ParseResult> {
-  const form = new FormData()
-  form.append('file', file)
-  const { data } = await http.post<ParseResult>('/api/v1/recipients/parse', form, {
-    timeout: UPLOAD_TIMEOUT_MS,
-  })
-  return data
-}
 
 export interface NewBulkEmail {
   file: File

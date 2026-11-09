@@ -3,7 +3,8 @@ import { useMutation } from '@tanstack/vue-query'
 
 import { createBatch, type NewBulkEmail } from '@/api/recipients'
 import { DEFAULT_BODY, DEFAULT_SUBJECT, unknownFields } from '@/lib/template'
-import type { ParseResult } from '@/types/api'
+import { useUploadSample } from '@/queries/useUploads'
+import type { UploadSummary } from '@/types/api'
 import { useRecipientCheck } from './useRecipientCheck'
 
 /** How many valid recipients the preview can flip through. */
@@ -22,10 +23,12 @@ export function useBulkEmailDraft() {
 
   const create = useMutation({ mutationFn: (input: NewBulkEmail) => createBatch(input) })
 
-  const validCount = computed(() => result.value?.valid.length ?? 0)
-  const skippedCount = computed(() => result.value?.problems.length ?? 0)
+  const validCount = computed(() => result.value?.valid_count ?? 0)
+  const skippedCount = computed(() => result.value?.problem_count ?? 0)
   const unverifiedCount = computed(() => result.value?.unverified_count ?? 0)
-  const samples = computed(() => result.value?.valid.slice(0, PREVIEW_SAMPLE) ?? [])
+  // A few real names for the preview, fetched separately: the check itself returns no rows.
+  const sample = useUploadSample(() => result.value?.upload_id ?? null, PREVIEW_SAMPLE)
+  const samples = computed(() => sample.data.value ?? [])
   const badFields = computed(() => unknownFields(`${subject.value}\n${body.value}`))
 
   const ready = computed(() => result.value !== null)
@@ -51,7 +54,7 @@ export function useBulkEmailDraft() {
   }
 
   /** Start from a file that Verify Emails already checked. */
-  function adopt(checkedFile: File, checked: ParseResult) {
+  function adopt(checkedFile: File, checked: UploadSummary) {
     previewIndex.value = 0
     check.adopt(checkedFile, checked)
   }

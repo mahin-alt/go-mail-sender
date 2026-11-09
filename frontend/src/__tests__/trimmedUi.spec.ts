@@ -13,9 +13,16 @@ import SendButton from '@/components/wizard/SendButton.vue'
 import { jobReason, tidyReason } from '@/lib/problems'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { Job, ParseResult } from '@/types/api'
+import type { Job } from '@/types/api'
+import { fakeUpload, typicalRows } from './uploadFakes'
 
 vi.mock('@/api/health', () => ({ getHealth: () => Promise.resolve({ status: 'ok' }) }))
+
+const upload = fakeUpload(typicalRows)
+vi.mock('@/api/uploads', () => ({
+  listUploadProblems: (...args: Parameters<typeof upload.problems>) => upload.problems(...args),
+  getUploadSample: (...args: Parameters<typeof upload.sample>) => upload.sample(...args),
+}))
 
 describe('tidyReason', () => {
   it.each([
@@ -45,48 +52,31 @@ describe('tidyReason', () => {
   })
 })
 
-const parsed: ParseResult = {
-  valid: [{ name: 'Aisha', email: 'aisha@shop.example', row: 2 }],
-  problems: [
-    { row: 3, name: 'Ben', email: 'ben@@x', reason: 'invalid email "ben@@x"' },
-    {
-      row: 4,
-      name: 'Aisha',
-      email: 'aisha@shop.example',
-      reason: 'duplicate email "aisha@shop.example"',
-    },
-    {
-      row: 5,
-      name: 'Kabir',
-      email: 'k@nope.example',
-      reason: 'domain nope.example does not exist or has no mail server',
-    },
-  ],
-  unverified_count: 1,
-  unverified: [
-    {
-      row: 6,
-      name: 'Lina',
-      email: 'lina@slow.example',
-      reason: 'could not verify domain slow.example: lookup timed out',
-    },
-  ],
+async function mountReview() {
+  queryClient.clear()
+  const w = mount(ReviewReport, {
+    props: { result: upload.summary },
+    global: { plugins: [[VueQueryPlugin, { queryClient }]] },
+  })
+  await flushPromises()
+  return w
 }
 
 describe('review table reasons', () => {
   it('shows the short reason in each group, without the email address', async () => {
-    const w = mount(ReviewReport, { props: { result: parsed } })
+    const w = await mountReview()
     const reasons = () => w.findAll('tbody tr').map((r) => r.findAll('td')[3]!.text())
     expect(reasons()).toEqual(['invalid email', 'duplicate email', 'domain does not accept mail'])
     await w
       .findAll('[aria-label="Show problems"] button')
       .find((b) => b.text().startsWith('Unverified'))!
       .trigger('click')
+    await flushPromises()
     expect(reasons()).toEqual(['could not verify domain'])
   })
 
-  it('has no "rows will be skipped" notice, only the tiles and the table', () => {
-    const w = mount(ReviewReport, { props: { result: parsed } })
+  it('has no "rows will be skipped" notice, only the tiles and the table', async () => {
+    const w = await mountReview()
     expect(w.text()).not.toContain('will be skipped.')
     expect(w.text()).not.toContain('You can send')
     expect(w.text()).toContain('Will be skipped')

@@ -10,14 +10,30 @@ import { ApiError } from '@/api/errors'
 import type { NewBulkEmail } from '@/api/recipients'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { CreateBatchResult, ParseResult, SettingItem } from '@/types/api'
+import type { ProblemParams } from '@/api/uploads'
+import type { CreateBatchResult, ProblemPage, SettingItem, UploadRow, UploadSummary } from '@/types/api'
 import NewBulkEmailView from '@/views/NewBulkEmailView.vue'
+import { fakeUpload, typicalRows } from './uploadFakes'
 
 const api = vi.hoisted(() => ({
-  parseRecipients: vi.fn<(file: File) => Promise<ParseResult>>(),
   createBatch: vi.fn<(input: NewBulkEmail) => Promise<CreateBatchResult>>(),
 }))
 vi.mock('@/api/recipients', () => api)
+
+const uploads = vi.hoisted(() => ({
+  createUpload: vi.fn<(file: File) => Promise<UploadSummary>>(),
+  listUploadProblems: vi.fn<(id: number, params?: ProblemParams) => Promise<ProblemPage>>(),
+  getUploadSample: vi.fn<(id: number, limit?: number) => Promise<UploadRow[]>>(),
+}))
+vi.mock('@/api/uploads', () => uploads)
+
+/** Make the server answer as if the chosen file held these rows. */
+function serverHas(rows: UploadRow[]) {
+  const fake = fakeUpload(rows)
+  uploads.createUpload.mockResolvedValue(fake.summary)
+  uploads.listUploadProblems.mockImplementation(fake.problems)
+  uploads.getUploadSample.mockImplementation(fake.sample)
+}
 
 const settingsApi = vi.hoisted(() => ({
   getSettings: vi.fn<() => Promise<SettingItem[]>>(),
@@ -34,38 +50,6 @@ const uploadLimit = (mb: number): SettingItem => ({
   secret: false,
   apply: 'instant',
   restart_required: false,
-})
-
-const parsed = (over: Partial<ParseResult> = {}): ParseResult => ({
-  valid: [
-    { name: 'Aisha', email: 'aisha@shop.example', row: 2 },
-    { name: 'রহিম', email: 'rahim@shop.example', row: 3 },
-  ],
-  problems: [
-    { row: 4, name: 'Ben', email: 'ben@@x', reason: 'invalid email "ben@@x"' },
-    {
-      row: 5,
-      name: 'Aisha',
-      email: 'aisha@shop.example',
-      reason: 'duplicate email "aisha@shop.example"',
-    },
-    {
-      row: 6,
-      name: 'Kabir',
-      email: 'k@nope.example',
-      reason: 'domain nope.example does not exist or has no mail server',
-    },
-  ],
-  unverified_count: 1,
-  unverified: [
-    {
-      row: 7,
-      name: 'Lina',
-      email: 'lina@slow.example',
-      reason: 'could not verify domain slow.example',
-    },
-  ],
-  ...over,
 })
 
 const xlsx = (name = 'orders.xlsx', size = 2048) => new File([new Uint8Array(size)], name)
@@ -97,7 +81,8 @@ const sendButton = (w: Awaited<ReturnType<typeof mountPage>>['wrapper']) =>
 beforeEach(() => {
   queryClient.clear()
   Object.values(api).forEach((fn) => fn.mockReset())
-  api.parseRecipients.mockResolvedValue(parsed())
+  Object.values(uploads).forEach((fn) => fn.mockReset())
+  serverHas(typicalRows)
   settingsApi.getSettings.mockReset()
   settingsApi.getSettings.mockResolvedValue([uploadLimit(10)])
   document.body.innerHTML = ''
@@ -116,7 +101,7 @@ describe('New Bulk Email page', () => {
     const { wrapper } = await mountPage()
     const file = xlsx()
     await choose(wrapper, file)
-    expect(api.parseRecipients).toHaveBeenCalledWith(file)
+    expect(uploads.createUpload).toHaveBeenCalledWith(file)
     expect(wrapper.text()).toContain('Ready to send')
     expect(wrapper.text()).toContain('Will be skipped')
     expect(wrapper.text()).not.toContain('rows will be skipped')
@@ -134,10 +119,64 @@ describe('New Bulk Email page', () => {
         .find((b) => b.text().startsWith(label))!
     expect(tab('All problems').text()).toContain('3')
     await tab('Duplicate').trigger('click')
+    await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(1)
     expect(wrapper.find('tbody').text()).toContain('duplicate email')
     await tab('Unverified').trigger('click')
+    await flushPromises()
     expect(wrapper.find('tbody').text()).toContain('lina@slow.example')
+  })
+
+  it('pages through problems with Load more instead of loading them all', async () => {
+    const many: UploadRow[] = Array.from({ length: 150 }, (_, i) => ({
+      row: i + 2,
+      name: `P${i}`,
+      email: `p${i}@`,
+      kind: 'invalid_email',
+      reason: `invalid email "p${i}@"`,
+    }))
+    serverHas([{ row: 1000, name: 'Ok', email: 'ok@shop.example', kind: 'ok' }, ...many])
+    const { wrapper } = await mountPage()
+    await choose(wrapper, xlsx())
+    expect(wrapper.findAll('tbody tr')).toHaveLength(100)
+    expect(wrapper.text()).toContain('100 of 150')
+    expect(uploads.listUploadProblems).toHaveBeenLastCalledWith(7, {
+      kinds: [],
+      q: '',
+      after: 0,
+      limit: 100,
+    })
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Load more')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')).toHaveLength(150)
+    expect(uploads.listUploadProblems).toHaveBeenLastCalledWith(7, {
+      kinds: [],
+      q: '',
+      after: 101, // row of the 100th problem
+      limit: 100,
+    })
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Load more')).toBe(false)
+  })
+
+  it('asks the server for one tab at a time', async () => {
+    const { wrapper } = await mountPage()
+    await choose(wrapper, xlsx())
+    await wrapper
+      .findAll('[aria-label="Show problems"] button')
+      .find((b) => b.text().startsWith('Invalid'))!
+      .trigger('click')
+    await flushPromises()
+    expect(uploads.listUploadProblems).toHaveBeenLastCalledWith(7, {
+      kinds: ['empty_email', 'empty_name', 'invalid_email'],
+      q: '',
+      after: 0,
+      limit: 100,
+    })
+    expect(wrapper.find('tbody').text()).toContain('ben@@x')
   })
 
   it('prefills the message and previews it for the first recipient', async () => {
@@ -147,7 +186,7 @@ describe('New Bulk Email page', () => {
       'Update on your order, {{.Name}}',
     )
     expect(wrapper.text()).toContain('Update on your order, Aisha')
-    expect(wrapper.text()).toContain('Preview for recipient 1 of 2')
+    expect(wrapper.text()).toContain('Preview for recipient 1 of 3') // ok + unverified rows
     await wrapper.find('button[aria-label="Next recipient"]').trigger('click')
     expect(wrapper.text()).toContain('Update on your order, রহিম')
   })
@@ -171,7 +210,7 @@ describe('New Bulk Email page', () => {
   it('refuses a file that is not .xlsx without calling the server', async () => {
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx('notes.csv'))
-    expect(api.parseRecipients).not.toHaveBeenCalled()
+    expect(uploads.createUpload).not.toHaveBeenCalled()
     expect(wrapper.find('[role="alert"]').text()).toBe('Only .xlsx files are supported.')
   })
 
@@ -188,14 +227,14 @@ describe('New Bulk Email page', () => {
 
     const big = xlsx('big.xlsx', 18 * 1024 * 1024)
     await choose(wrapper, big)
-    expect(api.parseRecipients).toHaveBeenCalledWith(big)
+    expect(uploads.createUpload).toHaveBeenCalledWith(big)
 
     await choose(wrapper, xlsx('huge.xlsx', 40 * 1024 * 1024 + 1))
     expect(wrapper.find('[role="alert"]').text()).toBe('The file is too large. The limit is 40 MB.')
   })
 
   it("shows the server's message when the file cannot be read", async () => {
-    api.parseRecipients.mockRejectedValue(
+    uploads.createUpload.mockRejectedValue(
       new ApiError('missing required columns: email', 400, 'http'),
     )
     const { wrapper } = await mountPage()
@@ -205,7 +244,7 @@ describe('New Bulk Email page', () => {
   })
 
   it('says so when no row is valid, and cannot send', async () => {
-    api.parseRecipients.mockResolvedValue(parsed({ valid: [] }))
+    serverHas(typicalRows.filter((r) => r.kind !== 'ok' && r.kind !== 'unverified'))
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx())
     expect(wrapper.text()).toContain('No valid emails in this file')
@@ -243,7 +282,7 @@ describe('New Bulk Email page', () => {
     const dialog = document.body.querySelector('.p-dialog')!
     expect(dialog.querySelector('.p-dialog-title')!.textContent).toBe('Confirm')
     expect(dialog.textContent).toContain(
-      '2 valid recipients will receive emails. 3 invalid entries will be excluded from sending.',
+      '3 valid recipients will receive emails. 3 invalid entries will be excluded from sending.',
     )
     expect(dialog.textContent).not.toContain('This cannot be undone')
     const confirm = [...dialog.querySelectorAll('button')].find(
@@ -281,14 +320,7 @@ describe('New Bulk Email page', () => {
   })
 
   it('leaves out the invalid-entries sentence when nothing is skipped, and uses the singular for one', async () => {
-    api.parseRecipients.mockResolvedValue(
-      parsed({
-        valid: [{ name: 'Aisha', email: 'aisha@shop.example', row: 2 }],
-        problems: [],
-        unverified_count: 0,
-        unverified: [],
-      }),
-    )
+    serverHas(typicalRows.slice(0, 1))
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx())
     await sendButton(wrapper).trigger('click')

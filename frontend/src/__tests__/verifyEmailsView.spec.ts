@@ -11,15 +11,31 @@ import type { NewBulkEmail } from '@/api/recipients'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
 import { usePendingCheckStore } from '@/stores/pendingCheck'
-import type { CreateBatchResult, ParseResult, SettingItem } from '@/types/api'
+import type { ProblemParams } from '@/api/uploads'
+import type { CreateBatchResult, ProblemPage, SettingItem, UploadRow, UploadSummary } from '@/types/api'
 import NewBulkEmailView from '@/views/NewBulkEmailView.vue'
 import VerifyEmailsView from '@/views/VerifyEmailsView.vue'
+import { fakeUpload, typicalRows } from './uploadFakes'
 
 const api = vi.hoisted(() => ({
-  parseRecipients: vi.fn<(file: File) => Promise<ParseResult>>(),
   createBatch: vi.fn<(input: NewBulkEmail) => Promise<CreateBatchResult>>(),
 }))
 vi.mock('@/api/recipients', () => api)
+
+const uploads = vi.hoisted(() => ({
+  createUpload: vi.fn<(file: File) => Promise<UploadSummary>>(),
+  listUploadProblems: vi.fn<(id: number, params?: ProblemParams) => Promise<ProblemPage>>(),
+  getUploadSample: vi.fn<(id: number, limit?: number) => Promise<UploadRow[]>>(),
+}))
+vi.mock('@/api/uploads', () => uploads)
+
+/** Make the server answer as if the chosen file held these rows. */
+function serverHas(rows: UploadRow[]) {
+  const fake = fakeUpload(rows)
+  uploads.createUpload.mockResolvedValue(fake.summary)
+  uploads.listUploadProblems.mockImplementation(fake.problems)
+  uploads.getUploadSample.mockImplementation(fake.sample)
+}
 
 const settingsApi = vi.hoisted(() => ({
   getSettings: vi.fn<() => Promise<SettingItem[]>>(),
@@ -38,15 +54,6 @@ const uploadLimit = (mb: number): SettingItem => ({
   restart_required: false,
 })
 
-const parsed = (over: Partial<ParseResult> = {}): ParseResult => ({
-  valid: [
-    { name: 'Aisha', email: 'aisha@shop.example', row: 2 },
-    { name: 'Rahim', email: 'rahim@shop.example', row: 3 },
-  ],
-  problems: [{ row: 4, name: 'Ben', email: 'ben@@x', reason: 'invalid email "ben@@x"' }],
-  unverified_count: 0,
-  ...over,
-})
 const xlsx = (name = 'orders.xlsx') => new File([new Uint8Array(2048)], name)
 
 async function mountAt(path: string, component: typeof VerifyEmailsView | typeof NewBulkEmailView) {
@@ -75,7 +82,8 @@ const button = (w: W, text: string) => w.findAll('button').find((b) => b.text().
 beforeEach(() => {
   queryClient.clear()
   Object.values(api).forEach((fn) => fn.mockReset())
-  api.parseRecipients.mockResolvedValue(parsed())
+  Object.values(uploads).forEach((fn) => fn.mockReset())
+  serverHas(typicalRows)
   settingsApi.getSettings.mockReset()
   settingsApi.getSettings.mockResolvedValue([uploadLimit(10)])
   document.body.innerHTML = ''
@@ -95,7 +103,7 @@ describe('Verify Emails page', () => {
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     const file = xlsx()
     await choose(wrapper, file)
-    expect(api.parseRecipients).toHaveBeenCalledWith(file)
+    expect(uploads.createUpload).toHaveBeenCalledWith(file)
     expect(wrapper.text()).toContain('Ready to send')
     expect(wrapper.text()).toContain('Will be skipped')
     expect(wrapper.text()).not.toContain('rows checked')
@@ -106,14 +114,14 @@ describe('Verify Emails page', () => {
   })
 
   it('says every row is valid when nothing is wrong', async () => {
-    api.parseRecipients.mockResolvedValue(parsed({ problems: [] }))
+    serverHas(typicalRows.filter((r) => r.kind === 'ok'))
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx())
     expect(wrapper.text()).toContain('Every row is valid')
   })
 
   it('cannot continue when no row is valid', async () => {
-    api.parseRecipients.mockResolvedValue(parsed({ valid: [] }))
+    serverHas(typicalRows.filter((r) => r.kind !== 'ok' && r.kind !== 'unverified'))
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx())
     expect(wrapper.text()).toContain('No valid emails in this file')
@@ -123,9 +131,9 @@ describe('Verify Emails page', () => {
   it('refuses a file that is not .xlsx and shows the server message for a bad file', async () => {
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx('notes.csv'))
-    expect(api.parseRecipients).not.toHaveBeenCalled()
+    expect(uploads.createUpload).not.toHaveBeenCalled()
     expect(wrapper.find('[role="alert"]').text()).toBe('Only .xlsx files are supported.')
-    api.parseRecipients.mockRejectedValue(
+    uploads.createUpload.mockRejectedValue(
       new ApiError('missing required columns: email', 400, 'http'),
     )
     await choose(wrapper, xlsx())
@@ -144,7 +152,7 @@ describe('Verify Emails page', () => {
     const { wrapper, router, pinia } = await mountAt('/verify-emails', VerifyEmailsView)
     const file = xlsx('customers.xlsx')
     await choose(wrapper, file)
-    expect(api.parseRecipients).toHaveBeenCalledTimes(1)
+    expect(uploads.createUpload).toHaveBeenCalledTimes(1)
     await button(wrapper, 'Continue to New Bulk Email').trigger('click')
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('new-bulk-email'))
 
@@ -161,7 +169,7 @@ describe('Verify Emails page', () => {
     expect(next.text()).toContain('Ready to send')
     const send = next.findAll('button').find((b) => b.text() === 'Send')!
     expect(send.attributes('disabled')).toBeUndefined() // the handed-over file is ready to send
-    expect(api.parseRecipients).toHaveBeenCalledTimes(1) // not uploaded and checked a second time
+    expect(uploads.createUpload).toHaveBeenCalledTimes(1) // not uploaded and checked a second time
     expect(usePendingCheckStore().take()).toBeNull() // and it is only handed over once
   })
 

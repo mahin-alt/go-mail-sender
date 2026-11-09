@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 
-import type { ParseResult } from '@/types/api'
+import type { UploadSummary } from '@/types/api'
 
 /**
  * A checked spreadsheet handed from Verify Emails to New Bulk Email, so the user does not have to
@@ -9,15 +9,15 @@ import type { ParseResult } from '@/types/api'
  */
 export const usePendingCheckStore = defineStore('pendingCheck', () => {
   const file = shallowRef<File | null>(null)
-  const result = shallowRef<ParseResult | null>(null)
+  const result = shallowRef<UploadSummary | null>(null)
 
-  function hold(checkedFile: File, checked: ParseResult) {
+  function hold(checkedFile: File, checked: UploadSummary) {
     file.value = checkedFile
     result.value = checked
   }
 
   /** Returns the held file and its result, and forgets them. */
-  function take(): { file: File; result: ParseResult } | null {
+  function take(): { file: File; result: UploadSummary } | null {
     const taken = file.value && result.value ? { file: file.value, result: result.value } : null
     file.value = null
     result.value = null

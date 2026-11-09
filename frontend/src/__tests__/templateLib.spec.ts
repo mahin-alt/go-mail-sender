@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { problemKind } from '@/lib/problems'
+import { tabCount } from '@/lib/problems'
+import type { UploadSummary } from '@/types/api'
 import { DEFAULT_BODY, DEFAULT_SUBJECT, fillTemplate, unknownFields } from '@/lib/template'
 
 const aisha = { name: 'Aisha', email: 'aisha@shop.example' }
@@ -31,16 +32,20 @@ describe('unknownFields', () => {
   })
 })
 
-describe('problemKind', () => {
+describe('tabCount', () => {
+  const summary = {
+    problem_count: 9,
+    unverified_count: 2,
+    problem_counts: { empty_email: 1, empty_name: 2, invalid_email: 3, duplicate: 2, bad_domain: 1 },
+  } as UploadSummary
+
   it.each([
-    ['email is empty', 'invalid'],
-    ['name is empty', 'invalid'],
-    ['invalid email "ben@@x"', 'invalid'],
-    ['email has no domain', 'invalid'],
-    ['duplicate email "a@b.c"', 'duplicate'],
-    ['domain nope.example does not exist or has no mail server', 'domain'],
-    ['domain x.example does not accept mail', 'domain'],
-  ])('%s is %s', (reason, kind) => {
-    expect(problemKind({ reason })).toBe(kind)
+    ['all', 9],
+    ['invalid', 6], // empty email + empty name + invalid email
+    ['duplicate', 2],
+    ['domain', 1],
+    ['unverified', 2],
+  ] as const)('%s holds %i rows', (tab, n) => {
+    expect(tabCount(tab, summary)).toBe(n)
   })
 })

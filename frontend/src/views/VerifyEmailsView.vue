@@ -14,7 +14,7 @@ const pending = usePendingCheckStore()
 const check = useRecipientCheck()
 
 const uploadError = computed(() => check.fileError.value || check.parseError.value)
-const canContinue = computed(() => (check.result.value?.valid.length ?? 0) > 0)
+const canContinue = computed(() => (check.result.value?.valid_count ?? 0) > 0)
 
 /** Carry the checked file over so New Bulk Email starts from it instead of asking for it again. */
 function continueToBulkEmail() {

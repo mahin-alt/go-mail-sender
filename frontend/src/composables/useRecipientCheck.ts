@@ -1,10 +1,10 @@
 import { computed, shallowRef } from 'vue'
 import { useMutation } from '@tanstack/vue-query'
 
-import { parseRecipients } from '@/api/recipients'
+import { createUpload } from '@/api/uploads'
 import { uploadLimitMb } from '@/lib/uploadLimit'
 import { useSettings } from '@/queries/useSettings'
-import type { ParseResult } from '@/types/api'
+import type { UploadSummary } from '@/types/api'
 
 /** Problems with the file itself, found before asking the server. */
 export function fileProblem(file: Pick<File, 'name' | 'size'>, maxMb: number): string {
@@ -14,15 +14,16 @@ export function fileProblem(file: Pick<File, 'name' | 'size'>, maxMb: number): s
 }
 
 /**
- * The chosen spreadsheet and what the server found in it. Checking sends and saves nothing.
+ * The chosen spreadsheet and what the server found in it (totals only; problem rows are paged from
+ * the server). Checking sends nothing; the server keeps the result for 24 hours.
  * Shared by Verify Emails and New Bulk Email. The File lives in a shallowRef: a reactive proxy
  * around a File would break uploading it.
  */
 export function useRecipientCheck() {
   const file = shallowRef<File | null>(null)
   const fileError = shallowRef('')
-  const result = shallowRef<ParseResult | null>(null)
-  const parse = useMutation({ mutationFn: (chosen: File) => parseRecipients(chosen) })
+  const result = shallowRef<UploadSummary | null>(null)
+  const parse = useMutation({ mutationFn: (chosen: File) => createUpload(chosen) })
   // MAX_UPLOAD_MB is changed on the Settings page without a restart; re-read whenever a page using this opens.
   const settings = useSettings()
   const maxUploadMb = computed(() => uploadLimitMb(settings.data.value))
@@ -56,7 +57,7 @@ export function useRecipientCheck() {
   }
 
   /** Take over a file that was already checked elsewhere, so it is not uploaded and checked twice. */
-  function adopt(checkedFile: File, checked: ParseResult) {
+  function adopt(checkedFile: File, checked: UploadSummary) {
     parse.reset()
     fileError.value = ''
     file.value = checkedFile

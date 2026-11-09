@@ -1,16 +1,25 @@
-import type { RowProblem } from '@/types/api'
+import type { RowKind, UploadSummary } from '@/types/api'
 
-export type ProblemKind = 'invalid' | 'duplicate' | 'domain'
+/** The tabs of the review table. */
+export type ProblemTab = 'all' | 'invalid' | 'duplicate' | 'domain' | 'unverified'
 
-/**
- * The API gives each skipped row a plain-text reason, not a code. These start with fixed words
- * (see internal/recipients and internal/domaincheck), so the kind is read from the start.
- */
-export function problemKind(problem: Pick<RowProblem, 'reason'>): ProblemKind {
-  const reason = problem.reason.toLowerCase()
-  if (reason.startsWith('duplicate')) return 'duplicate'
-  if (reason.startsWith('domain ')) return 'domain'
-  return 'invalid'
+/** Which row kinds each tab lists. `all` is empty: the server then lists every skipped kind. */
+export const TAB_KINDS: Record<ProblemTab, RowKind[]> = {
+  all: [],
+  invalid: ['empty_email', 'empty_name', 'invalid_email'],
+  duplicate: ['duplicate'],
+  domain: ['bad_domain'],
+  unverified: ['unverified'],
+}
+
+/** How many rows a tab holds, from the totals the server worked out once. */
+export function tabCount(tab: ProblemTab, summary: UploadSummary): number {
+  if (tab === 'all') return summary.problem_count
+  if (tab === 'unverified') return summary.unverified_count
+  return TAB_KINDS[tab].reduce(
+    (n, kind) => n + (summary.problem_counts[kind as keyof UploadSummary['problem_counts']] ?? 0),
+    0,
+  )
 }
 
 /**

@@ -1,38 +1,41 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 
+import AppButton from '@/components/ui/AppButton.vue'
 import KpiTile from '@/components/ui/KpiTile.vue'
 import StatusTabs, { type TabOption } from '@/components/ui/StatusTabs.vue'
-import { problemKind, tidyReason, type ProblemKind } from '@/lib/problems'
-import type { ParseResult, RowProblem } from '@/types/api'
+import { TAB_KINDS, tabCount, tidyReason, type ProblemTab } from '@/lib/problems'
+import { useUploadProblems } from '@/queries/useUploads'
+import type { UploadSummary } from '@/types/api'
 
-const props = defineProps<{ result: ParseResult }>()
+const props = defineProps<{ result: UploadSummary }>()
 
-type Tab = 'all' | ProblemKind | 'unverified'
-const tab = shallowRef<Tab>('all')
+const tab = shallowRef<ProblemTab>('all')
 
-const problems = computed(() => props.result.problems)
-const unverified = computed(() => props.result.unverified ?? [])
-const valid = computed(() => props.result.valid.length)
-const skipped = computed(() => problems.value.length)
+const valid = computed(() => props.result.valid_count)
+const skipped = computed(() => props.result.problem_count)
+const unverified = computed(() => props.result.unverified_count)
 
-function count(kind: ProblemKind) {
-  return problems.value.filter((p) => problemKind(p) === kind).length
-}
+const tabs = computed<TabOption<ProblemTab>[]>(() =>
+  (
+    [
+      ['all', 'All problems'],
+      ['invalid', 'Invalid'],
+      ['duplicate', 'Duplicate'],
+      ['domain', 'Bad domain'],
+      ['unverified', 'Unverified'],
+    ] as const
+  ).map(([value, label]) => ({ value, label, count: tabCount(value, props.result) })),
+)
 
-const tabs = computed<TabOption<Tab>[]>(() => [
-  { value: 'all', label: 'All problems', count: skipped.value },
-  { value: 'invalid', label: 'Invalid', count: count('invalid') },
-  { value: 'duplicate', label: 'Duplicate', count: count('duplicate') },
-  { value: 'domain', label: 'Bad domain', count: count('domain') },
-  { value: 'unverified', label: 'Unverified', count: unverified.value.length },
-])
-
-const rows = computed<RowProblem[]>(() => {
-  if (tab.value === 'unverified') return unverified.value
-  if (tab.value === 'all') return problems.value
-  return problems.value.filter((p) => problemKind(p) === tab.value)
-})
+// Rows come from the server a page at a time; only the pages looked at are kept.
+const problems = useUploadProblems(
+  () => props.result.upload_id,
+  () => TAB_KINDS[tab.value],
+)
+const rows = computed(() => problems.data.value?.pages.flatMap((p) => p.items) ?? [])
+const shown = computed(() => rows.value.length)
+const total = computed(() => tabCount(tab.value, props.result))
 const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : 'text-bad-ink'))
 </script>
 
@@ -50,7 +53,7 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
       <KpiTile
         soft
         label="Could not verify"
-        :value="result.unverified_count"
+        :value="unverified"
         caption="still sent (domain check timed out)"
       />
     </div>
@@ -70,7 +73,7 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
     </p>
     <div v-else class="h-3.5" />
 
-    <template v-if="skipped > 0 || unverified.length > 0">
+    <template v-if="skipped > 0 || unverified > 0">
       <StatusTabs v-model="tab" class="mb-2.5" label="Show problems" :tabs="tabs" />
       <div class="max-h-85 overflow-auto">
         <table class="w-full border-collapse text-left text-sm">
@@ -88,16 +91,36 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
               <td class="text-user px-2.5 py-2.5 font-semibold">{{ row.name || '(empty)' }}</td>
               <td class="px-2.5 py-2.5 break-all">{{ row.email || '(empty)' }}</td>
               <td class="text-user px-2.5 py-2.5 text-[0.8125rem]" :class="rowTone">
-                {{ tidyReason(row.reason) }}
+                {{ tidyReason(row.reason ?? '') }}
               </td>
             </tr>
-            <tr v-if="rows.length === 0">
+            <tr v-if="rows.length === 0 && !problems.isPending.value && !problems.isError.value">
               <td colspan="4" class="text-muted py-6 text-center text-sm">
                 Nothing in this group.
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <p v-if="problems.isError.value" class="text-bad-ink mt-2.5 text-sm" role="alert">
+        {{ problems.error.value?.message || 'Could not load the rows.' }}
+      </p>
+      <div
+        v-if="shown > 0 && (problems.hasNextPage.value || shown < total)"
+        class="mt-2.5 flex items-center gap-3"
+      >
+        <span class="text-muted text-sm tabular-nums">
+          {{ shown.toLocaleString('en') }} of {{ total.toLocaleString('en') }}
+        </span>
+        <AppButton
+          v-if="problems.hasNextPage.value"
+          variant="secondary"
+          :loading="problems.isFetchingNextPage.value"
+          @click="problems.fetchNextPage()"
+        >
+          Load more
+        </AppButton>
       </div>
     </template>
   </div>
