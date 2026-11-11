@@ -10,52 +10,22 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import JobsTable from '@/components/batches/JobsTable.vue'
 import ReviewReport from '@/components/wizard/ReviewReport.vue'
 import SendButton from '@/components/wizard/SendButton.vue'
-import { jobReason, tidyReason } from '@/lib/problems'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { Job } from '@/types/api'
-import { fakeUpload, typicalRows } from './uploadFakes'
+import type { Email } from '@/types/api'
+import { fakeBatch, typicalRows } from './uploadFakes'
 
 vi.mock('@/api/health', () => ({ getHealth: () => Promise.resolve({ status: 'ok' }) }))
 
-const upload = fakeUpload(typicalRows)
-vi.mock('@/api/uploads', () => ({
-  listUploadProblems: (...args: Parameters<typeof upload.problems>) => upload.problems(...args),
-  getUploadSample: (...args: Parameters<typeof upload.sample>) => upload.sample(...args),
-}))
-
-describe('tidyReason', () => {
-  it.each([
-    ['invalid email "not-an-email"', 'invalid email'],
-    ['duplicate email "aisha@shop.example"', 'duplicate email'],
-    ['domain nope.example does not exist or has no mail server', 'domain does not accept mail'],
-    ['domain example.com does not accept mail', 'domain does not accept mail'],
-    [
-      'could not verify domain slow.example: lookup slow.example on 127.0.0.53:53: server misbehaving',
-      'could not verify domain',
-    ],
-    ['email is empty', 'email is empty'],
-    ['name is empty', 'name is empty'],
-    ['email has no domain', 'email has no domain'],
-  ])('%s -> %s', (reason, shown) => {
-    expect(tidyReason(reason)).toBe(shown)
-  })
-
-  it('only shortens skipped rows; delivery errors keep the full server text', () => {
-    expect(jobReason({ status: 'invalid', last_error: 'invalid email "x@@y"' })).toBe(
-      'invalid email',
-    )
-    expect(
-      jobReason({ status: 'failed', last_error: 'acquire smtp connection: connection refused' }),
-    ).toBe('acquire smtp connection: connection refused')
-    expect(jobReason({ status: 'sent' })).toBe('')
-  })
+vi.mock('@/api/batches', async () => {
+  const { fakeIssues, fakeSample, typicalRows } = await import('./uploadFakes')
+  return { listIssues: fakeIssues(typicalRows), getSample: fakeSample(typicalRows) }
 })
 
 async function mountReview() {
   queryClient.clear()
   const w = mount(ReviewReport, {
-    props: { result: upload.summary },
+    props: { result: fakeBatch(typicalRows) },
     global: { plugins: [[VueQueryPlugin, { queryClient }]] },
   })
   await flushPromises()
@@ -66,7 +36,7 @@ describe('review table reasons', () => {
   it('shows the short reason in each group, without the email address', async () => {
     const w = await mountReview()
     const reasons = () => w.findAll('tbody tr').map((r) => r.findAll('td')[3]!.text())
-    expect(reasons()).toEqual(['invalid email', 'duplicate email', 'domain does not accept mail'])
+    expect(reasons()).toEqual(['invalid email', 'domain does not accept mail'])
     await w
       .findAll('[aria-label="Show problems"] button')
       .find((b) => b.text().startsWith('Unverified'))!
@@ -84,24 +54,27 @@ describe('review table reasons', () => {
 })
 
 describe('jobs table', () => {
-  it('shows the short reason for a skipped row', () => {
-    const job: Job = {
+  it("shows a failed email's error as the server gave it", () => {
+    const job: Email = {
       id: 1,
       batch_id: 1,
-      recipient_name: 'Ben',
-      recipient_email: 'ben@@x',
+      recipient_id: 1,
+      row: 2,
+      name: 'Ben',
+      email: 'ben@shop.example',
       subject: '',
       body: '',
-      status: 'invalid',
-      attempts: 0,
+      status: 'failed',
+      attempts: 3,
       max_attempts: 3,
-      last_error: 'invalid email "ben@@x"',
-      run_at: '',
+      last_error: 'rcpt to: 550 no such user',
+      available_at: '',
+      sent_at: null,
       created_at: '',
       updated_at: '',
     }
     const w = mount(JobsTable, { props: { jobs: [job] } })
-    expect(w.findAll('td')[3]!.text()).toBe('invalid email')
+    expect(w.findAll('td')[3]!.text()).toBe('rcpt to: 550 no such user')
   })
 })
 

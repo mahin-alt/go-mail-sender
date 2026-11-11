@@ -7,32 +7,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { ApiError } from '@/api/errors'
-import type { NewBulkEmail } from '@/api/recipients'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { ProblemParams } from '@/api/uploads'
-import type { CreateBatchResult, ProblemPage, SettingItem, UploadRow, UploadSummary } from '@/types/api'
+import type { Batch, SettingItem } from '@/types/api'
 import NewBulkEmailView from '@/views/NewBulkEmailView.vue'
-import { fakeUpload, typicalRows } from './uploadFakes'
+import { batchesApiMock, serverHas as fakeServer, typicalRows, type FakeRow } from './uploadFakes'
 
-const api = vi.hoisted(() => ({
-  createBatch: vi.fn<(input: NewBulkEmail) => Promise<CreateBatchResult>>(),
-}))
-vi.mock('@/api/recipients', () => api)
+const api = vi.hoisted(() => ({}) as ReturnType<typeof batchesApiMock>)
+vi.mock('@/api/batches', async () => {
+  const { batchesApiMock } = await import('./uploadFakes')
+  return Object.assign(api, batchesApiMock())
+})
 
-const uploads = vi.hoisted(() => ({
-  createUpload: vi.fn<(file: File) => Promise<UploadSummary>>(),
-  listUploadProblems: vi.fn<(id: number, params?: ProblemParams) => Promise<ProblemPage>>(),
-  getUploadSample: vi.fn<(id: number, limit?: number) => Promise<UploadRow[]>>(),
-}))
-vi.mock('@/api/uploads', () => uploads)
-
-/** Make the server answer as if the chosen file held these rows. */
-function serverHas(rows: UploadRow[]) {
-  const fake = fakeUpload(rows)
-  uploads.createUpload.mockResolvedValue(fake.summary)
-  uploads.listUploadProblems.mockImplementation(fake.problems)
-  uploads.getUploadSample.mockImplementation(fake.sample)
+/** Make the server answer as if the chosen file held these rows (a draft bulk batch). */
+function serverHas(rows: FakeRow[]) {
+  return fakeServer(api, rows)
 }
 
 const settingsApi = vi.hoisted(() => ({
@@ -54,9 +43,9 @@ const uploadLimit = (mb: number): SettingItem => ({
 
 const xlsx = (name = 'orders.xlsx', size = 2048) => new File([new Uint8Array(size)], name)
 
-async function mountPage() {
+async function mountPage(path = '/bulk-emails/new') {
   const router = createRouter({ history: createMemoryHistory(), routes })
-  router.push('/bulk-emails/new')
+  router.push(path)
   await router.isReady()
   const wrapper = mount(NewBulkEmailView, {
     attachTo: document.body,
@@ -81,7 +70,6 @@ const sendButton = (w: Awaited<ReturnType<typeof mountPage>>['wrapper']) =>
 beforeEach(() => {
   queryClient.clear()
   Object.values(api).forEach((fn) => fn.mockReset())
-  Object.values(uploads).forEach((fn) => fn.mockReset())
   serverHas(typicalRows)
   settingsApi.getSettings.mockReset()
   settingsApi.getSettings.mockResolvedValue([uploadLimit(10)])
@@ -101,7 +89,7 @@ describe('New Bulk Email page', () => {
     const { wrapper } = await mountPage()
     const file = xlsx()
     await choose(wrapper, file)
-    expect(uploads.createUpload).toHaveBeenCalledWith(file)
+    expect(api.uploadSpreadsheet).toHaveBeenCalledWith('bulk_send', file, expect.any(Function))
     expect(wrapper.text()).toContain('Ready to send')
     expect(wrapper.text()).toContain('Will be skipped')
     expect(wrapper.text()).not.toContain('rows will be skipped')
@@ -117,31 +105,32 @@ describe('New Bulk Email page', () => {
       wrapper
         .findAll('[aria-label="Show problems"] button')
         .find((b) => b.text().startsWith(label))!
-    expect(tab('All problems').text()).toContain('3')
-    await tab('Duplicate').trigger('click')
+    expect(tab('All problems').text()).toContain('2')
+    await tab('Bad domain').trigger('click')
     await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(1)
-    expect(wrapper.find('tbody').text()).toContain('duplicate email')
+    expect(wrapper.find('tbody').text()).toContain('domain does not accept mail')
     await tab('Unverified').trigger('click')
     await flushPromises()
     expect(wrapper.find('tbody').text()).toContain('lina@slow.example')
   })
 
   it('pages through problems with Load more instead of loading them all', async () => {
-    const many: UploadRow[] = Array.from({ length: 150 }, (_, i) => ({
+    const many: FakeRow[] = Array.from({ length: 150 }, (_, i) => ({
       row: i + 2,
       name: `P${i}`,
       email: `p${i}@`,
-      kind: 'invalid_email',
-      reason: `invalid email "p${i}@"`,
+      status: 'invalid',
+      reason: 'invalid_email',
     }))
-    serverHas([{ row: 1000, name: 'Ok', email: 'ok@shop.example', kind: 'ok' }, ...many])
+    serverHas([{ row: 1000, name: 'Ok', email: 'ok@shop.example', status: 'valid' }, ...many])
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx())
     expect(wrapper.findAll('tbody tr')).toHaveLength(100)
     expect(wrapper.text()).toContain('100 of 150')
-    expect(uploads.listUploadProblems).toHaveBeenLastCalledWith(7, {
-      kinds: [],
+    expect(api.listIssues).toHaveBeenLastCalledWith(7, {
+      status: 'invalid',
+      reasons: [],
       q: '',
       after: 0,
       limit: 100,
@@ -153,10 +142,11 @@ describe('New Bulk Email page', () => {
       .trigger('click')
     await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(150)
-    expect(uploads.listUploadProblems).toHaveBeenLastCalledWith(7, {
-      kinds: [],
+    expect(api.listIssues).toHaveBeenLastCalledWith(7, {
+      status: 'invalid',
+      reasons: [],
       q: '',
-      after: 101, // row of the 100th problem
+      after: 101, // ID of the 100th problem
       limit: 100,
     })
     expect(wrapper.findAll('button').some((b) => b.text() === 'Load more')).toBe(false)
@@ -170,8 +160,9 @@ describe('New Bulk Email page', () => {
       .find((b) => b.text().startsWith('Invalid'))!
       .trigger('click')
     await flushPromises()
-    expect(uploads.listUploadProblems).toHaveBeenLastCalledWith(7, {
-      kinds: ['empty_email', 'empty_name', 'invalid_email'],
+    expect(api.listIssues).toHaveBeenLastCalledWith(7, {
+      status: 'invalid',
+      reasons: ['empty_email', 'empty_name', 'invalid_email'],
       q: '',
       after: 0,
       limit: 100,
@@ -186,7 +177,7 @@ describe('New Bulk Email page', () => {
       'Update on your order, {{.Name}}',
     )
     expect(wrapper.text()).toContain('Update on your order, Aisha')
-    expect(wrapper.text()).toContain('Preview for recipient 1 of 3') // ok + unverified rows
+    expect(wrapper.text()).toContain('Preview for recipient 1 of 4') // valid + unverified rows
     await wrapper.find('button[aria-label="Next recipient"]').trigger('click')
     expect(wrapper.text()).toContain('Update on your order, রহিম')
   })
@@ -210,7 +201,7 @@ describe('New Bulk Email page', () => {
   it('refuses a file that is not .xlsx without calling the server', async () => {
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx('notes.csv'))
-    expect(uploads.createUpload).not.toHaveBeenCalled()
+    expect(api.uploadSpreadsheet).not.toHaveBeenCalled()
     expect(wrapper.find('[role="alert"]').text()).toBe('Only .xlsx files are supported.')
   })
 
@@ -227,24 +218,29 @@ describe('New Bulk Email page', () => {
 
     const big = xlsx('big.xlsx', 18 * 1024 * 1024)
     await choose(wrapper, big)
-    expect(uploads.createUpload).toHaveBeenCalledWith(big)
+    expect(api.uploadSpreadsheet).toHaveBeenCalledWith('bulk_send', big, expect.any(Function))
 
     await choose(wrapper, xlsx('huge.xlsx', 40 * 1024 * 1024 + 1))
     expect(wrapper.find('[role="alert"]').text()).toBe('The file is too large. The limit is 40 MB.')
   })
 
   it("shows the server's message when the file cannot be read", async () => {
-    uploads.createUpload.mockRejectedValue(
-      new ApiError('missing required columns: email', 400, 'http'),
-    )
+    const batch = serverHas(typicalRows)
+    api.getBatch.mockResolvedValue({
+      ...batch,
+      status: 'import_failed',
+      import_error: 'sheet must have "name" and "email" columns in its header row',
+    })
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx())
-    expect(wrapper.find('[role="alert"]').text()).toBe('missing required columns: email')
+    expect(wrapper.find('[role="alert"]').text()).toBe(
+      'The file could not be checked: sheet must have "name" and "email" columns in its header row',
+    )
     expect(wrapper.findAll('section')[1]!.attributes('inert')).toBeDefined()
   })
 
   it('says so when no row is valid, and cannot send', async () => {
-    serverHas(typicalRows.filter((r) => r.kind !== 'ok' && r.kind !== 'unverified'))
+    serverHas(typicalRows.filter((r) => r.status === 'invalid'))
     const { wrapper } = await mountPage()
     await choose(wrapper, xlsx())
     expect(wrapper.text()).toContain('No valid emails in this file')
@@ -262,27 +258,18 @@ describe('New Bulk Email page', () => {
     expect(wrapper.findAll('section')[1]!.attributes('inert')).toBeDefined()
   })
 
-  it('asks for confirmation, then queues the batch and opens its page', async () => {
-    api.createBatch.mockResolvedValue({
-      batch_id: 45,
-      filename: 'orders.xlsx',
-      total_rows: 5,
-      valid_count: 2,
-      invalid_count: 3,
-      status: 'pending',
-      unverified_count: 1,
-      message: 'ok',
-    })
+  it('asks for confirmation, then sends the uploaded batch and opens its page', async () => {
+    const batch = serverHas(typicalRows)
+    api.sendBatch.mockResolvedValue({ ...batch, status: 'generating_jobs' } satisfies Batch)
     const { wrapper, router } = await mountPage()
-    const file = xlsx()
-    await choose(wrapper, file)
+    await choose(wrapper, xlsx())
     await sendButton(wrapper).trigger('click')
     await flushPromises()
-    expect(api.createBatch).not.toHaveBeenCalled()
+    expect(api.sendBatch).not.toHaveBeenCalled()
     const dialog = document.body.querySelector('.p-dialog')!
     expect(dialog.querySelector('.p-dialog-title')!.textContent).toBe('Confirm')
     expect(dialog.textContent).toContain(
-      '3 valid recipients will receive emails. 3 invalid entries will be excluded from sending.',
+      '4 valid recipients will receive emails. 2 invalid entries will be excluded from sending.',
     )
     expect(dialog.textContent).not.toContain('This cannot be undone')
     const confirm = [...dialog.querySelectorAll('button')].find(
@@ -290,13 +277,13 @@ describe('New Bulk Email page', () => {
     )!
     confirm.click()
     await flushPromises()
-    expect(api.createBatch).toHaveBeenCalledWith({
-      file,
+    expect(api.sendBatch).toHaveBeenCalledWith(7, {
       subject: 'Update on your order, {{.Name}}',
       body: expect.stringContaining('Hello {{.Name}}'),
     })
+    expect(api.uploadSpreadsheet).toHaveBeenCalledTimes(1) // the file went up once, at the start
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('bulk-email-detail'))
-    expect(router.currentRoute.value.params.id).toBe('45')
+    expect(router.currentRoute.value.params.id).toBe('7')
   })
 
   it('centres the title, leaves room before the buttons, and has just Cancel and Send', async () => {
@@ -338,11 +325,11 @@ describe('New Bulk Email page', () => {
       .find((b) => b.textContent?.trim() === 'Cancel')!
       .click()
     await flushPromises()
-    expect(api.createBatch).not.toHaveBeenCalled()
+    expect(api.sendBatch).not.toHaveBeenCalled()
   })
 
   it('stays on the page and keeps everything when sending fails', async () => {
-    api.createBatch.mockRejectedValue(
+    api.sendBatch.mockRejectedValue(
       new ApiError('invalid body template: unexpected }', 400, 'http'),
     )
     const { wrapper, router } = await mountPage()
@@ -355,5 +342,21 @@ describe('New Bulk Email page', () => {
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('new-bulk-email')
     expect(wrapper.text()).toContain('orders.xlsx')
+  })
+
+  it('opens a draft from the list by its ID, without uploading', async () => {
+    const { wrapper } = await mountPage('/bulk-emails/new?batch=7')
+    expect(api.uploadSpreadsheet).not.toHaveBeenCalled()
+    expect(api.getBatch).toHaveBeenCalledWith(7)
+    expect(wrapper.text()).toContain('orders.xlsx')
+    expect(sendButton(wrapper).attributes('disabled')).toBeUndefined()
+  })
+
+  it('does not offer to send a batch that was already sent', async () => {
+    const batch = serverHas(typicalRows)
+    api.getBatch.mockResolvedValue({ ...batch, status: 'sending' })
+    const { wrapper } = await mountPage('/bulk-emails/new?batch=7')
+    expect(wrapper.text()).toContain('This file was already sent')
+    expect(sendButton(wrapper).attributes('disabled')).toBeDefined()
   })
 })

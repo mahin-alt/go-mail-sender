@@ -5,25 +5,26 @@ import ToastService from 'primevue/toastservice'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import type { BatchListParams, JobListParams } from '@/api/batches'
+import type { BatchListParams, EmailParams } from '@/api/batches'
 import { ApiError } from '@/api/errors'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
 import type {
-  BatchProgress,
-  BatchSummary,
+  Batch,
   CancelResult,
-  Job,
+  CursorPage,
+  Email,
   Paged,
   RetryResult,
 } from '@/types/api'
 import BulkEmailDetailView from '@/views/BulkEmailDetailView.vue'
 import BulkEmailsView from '@/views/BulkEmailsView.vue'
+import { fakeBatch } from './uploadFakes'
 
 const api = vi.hoisted(() => ({
-  listBatches: vi.fn<(p: BatchListParams) => Promise<Paged<BatchSummary>>>(),
-  getBatch: vi.fn<(id: number) => Promise<BatchProgress>>(),
-  listJobs: vi.fn<(id: number, p: JobListParams) => Promise<Paged<Job>>>(),
+  listBatches: vi.fn<(p: BatchListParams) => Promise<Paged<Batch>>>(),
+  getBatch: vi.fn<(id: number) => Promise<Batch>>(),
+  listEmails: vi.fn<(id: number, p: EmailParams) => Promise<CursorPage<Email>>>(),
   retryBatch: vi.fn<(id: number) => Promise<RetryResult>>(),
   retryJob: vi.fn<(id: number) => Promise<RetryResult>>(),
   cancelBatch: vi.fn<(id: number) => Promise<CancelResult>>(),
@@ -31,33 +32,36 @@ const api = vi.hoisted(() => ({
 vi.mock('@/api/batches', () => api)
 vi.mock('@/api/health', () => ({ getHealth: () => Promise.resolve({ status: 'ok' }) }))
 
-const batch = (over: Partial<BatchSummary> = {}): BatchSummary => ({
+/** A sent bulk batch: 312 rows, 300 sent, 12 failed. */
+const batch = (over: Partial<Batch> = {}): Batch => ({
+  ...fakeBatch([]),
   id: 42,
   filename: 'refunds_oct27.xlsx',
-  status: 'completed',
-  total: 312,
-  sent: 300,
-  failed: 12,
-  pending: 0,
-  processing: 0,
-  invalid: 0,
-  cancelled: 0,
+  status: 'completed_with_errors',
+  total_rows: 312,
+  valid_count: 312,
+  sent_count: 300,
+  failed_count: 12,
   created_at: new Date().toISOString(),
+  send_requested_at: new Date().toISOString(),
   ...over,
 })
 
-const job = (over: Partial<Job> = {}): Job => ({
+const job = (over: Partial<Email> = {}): Email => ({
   id: 1043,
   batch_id: 42,
-  recipient_name: 'Rahim',
-  recipient_email: 'rahim@shop.example',
+  recipient_id: 1,
+  row: 2,
+  name: 'Rahim',
+  email: 'rahim@shop.example',
   subject: 'Refund',
   body: 'Hello <b>Rahim</b>',
   status: 'failed',
   attempts: 3,
   max_attempts: 3,
   last_error: 'Mailbox full',
-  run_at: '',
+  available_at: '',
+  sent_at: null,
   created_at: '',
   updated_at: new Date().toISOString(),
   ...over,
@@ -85,7 +89,7 @@ beforeEach(() => {
     items:
       p.limit === 1
         ? []
-        : [batch(), batch({ id: 43, filename: 'payouts.xlsx', status: 'processing', failed: 0 })],
+        : [batch(), batch({ id: 43, filename: 'payouts.xlsx', status: 'sending', failed_count: 0 })],
     total: p.status === 'completed' ? 22 : 24,
     limit: p.limit,
     offset: 0,
@@ -105,7 +109,16 @@ describe('Bulk Emails list', () => {
   it('shows a count on each status tab', async () => {
     const { wrapper } = await mountAt('/bulk-emails', BulkEmailsView)
     const tabs = wrapper.findAll('[aria-label="Filter by status"] button').map((b) => b.text())
-    expect(tabs).toEqual(['All 24', 'Pending 24', 'Processing 24', 'Completed 22', 'Cancelled 24'])
+    expect(tabs).toEqual([
+      'All 24',
+      'Not sent 24',
+      'Sending 24',
+      'Completed 22',
+      'With failures 24',
+      'Cancelled 24',
+    ])
+    // The list shows bulk batches only (verified files appear once they are sent).
+    expect(api.listBatches).toHaveBeenCalledWith(expect.objectContaining({ type: 'bulk_send', limit: 1 }))
   })
 
   it('puts the chosen tab and search in the address, going back to page 1', async () => {
@@ -118,6 +131,7 @@ describe('Bulk Emails list', () => {
   it('asks the API for the page in the address', async () => {
     await mountAt('/bulk-emails?status=completed&q=oct&page=2', BulkEmailsView)
     expect(api.listBatches).toHaveBeenCalledWith({
+      type: 'bulk_send',
       status: 'completed',
       q: 'oct',
       limit: 20,
@@ -147,31 +161,13 @@ describe('Bulk Emails list', () => {
 })
 
 describe('Bulk Email detail', () => {
-  const progress = (over: Partial<BatchProgress> = {}): BatchProgress => ({
-    batch_id: 42,
-    filename: 'refunds_oct27.xlsx',
-    status: 'completed',
-    total: 312,
-    sent: 300,
-    failed: 12,
-    pending: 0,
-    processing: 0,
-    invalid: 0,
-    cancelled: 0,
-    created_at: new Date().toISOString(),
-    ...over,
-  })
+  const progress = batch
 
   beforeEach(() => {
     api.getBatch.mockResolvedValue(progress())
-    api.listJobs.mockResolvedValue({
-      items: [
-        job(),
-        job({ id: 1046, status: 'sent', last_error: 'old error', recipient_name: 'Sadia' }),
-      ],
-      total: 312,
-      limit: 20,
-      offset: 0,
+    api.listEmails.mockResolvedValue({
+      items: [job(), job({ id: 1046, status: 'sent', last_error: 'old error', name: 'Sadia' })],
+      next_after: null,
     })
   })
 
@@ -182,7 +178,7 @@ describe('Bulk Email detail', () => {
   })
 
   it('has no Retry button when nothing failed', async () => {
-    api.getBatch.mockResolvedValue(progress({ failed: 0 }))
+    api.getBatch.mockResolvedValue(progress({ status: 'completed', failed_count: 0 }))
     const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
     expect(wrapper.find('button[aria-label*="failed email"]').exists()).toBe(false)
   })
@@ -212,7 +208,7 @@ describe('Bulk Email detail', () => {
     const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
     expect(wrapper.find('button[aria-label^="Cancel this Bulk Email"]').exists()).toBe(false)
 
-    api.getBatch.mockResolvedValue(progress({ status: 'processing', pending: 250, failed: 0 }))
+    api.getBatch.mockResolvedValue(progress({ status: 'sending', pending_count: 250, failed_count: 0 }))
     queryClient.clear()
     const again = await mountAt('/bulk-emails/42', BulkEmailDetailView)
     expect(
@@ -221,7 +217,7 @@ describe('Bulk Email detail', () => {
   })
 
   it('asks before cancelling, then cancels and reports how many were stopped', async () => {
-    api.getBatch.mockResolvedValue(progress({ status: 'processing', pending: 250, failed: 0 }))
+    api.getBatch.mockResolvedValue(progress({ status: 'sending', pending_count: 250, failed_count: 0 }))
     api.cancelBatch.mockResolvedValue({ cancelled: 250 })
     const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
     await wrapper.find('button[aria-label="Cancel this Bulk Email (250 unsent)"]').trigger('click')
@@ -240,8 +236,8 @@ describe('Bulk Email detail', () => {
     api.getBatch.mockResolvedValue(
       progress({
         status: 'cancelled',
-        failed: 0,
-        cancelled: 630036,
+        failed_count: 0,
+        cancelled_count: 630036,
         cancelled_at: new Date().toISOString(),
       }),
     )
@@ -275,5 +271,49 @@ describe('Bulk Email detail', () => {
     const { wrapper } = await mountAt('/bulk-emails/9999', BulkEmailDetailView)
     await vi.waitFor(() => expect(wrapper.find('[role="alert"]').exists()).toBe(true))
     expect(wrapper.find('[role="alert"]').text()).toContain('does not exist')
+  })
+
+  it('pages emails with Load more, asking for the next page after the last ID', async () => {
+    api.listEmails.mockImplementation(async (_id, p) =>
+      p.after
+        ? { items: [job({ id: 2000, name: 'Later' })], next_after: null }
+        : { items: [job()], next_after: 1043 },
+    )
+    const { wrapper } = await mountAt('/bulk-emails/42?status=failed', BulkEmailDetailView)
+    expect(api.listEmails).toHaveBeenCalledWith(42, { status: 'failed', q: '', after: 0, limit: 20 })
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Load more')!
+      .trigger('click')
+    await flushPromises()
+    expect(api.listEmails).toHaveBeenLastCalledWith(42, {
+      status: 'failed',
+      q: '',
+      after: 1043,
+      limit: 20,
+    })
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2)
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Load more')).toBe(false)
+  })
+
+  it('shows a draft as not sent yet, with a way to write and send it', async () => {
+    api.getBatch.mockResolvedValue(
+      progress({ status: 'draft', sent_count: 0, failed_count: 0, invalid_count: 4, send_requested_at: null }),
+    )
+    const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
+    expect(wrapper.text()).toContain('Not sent yet')
+    expect(wrapper.text()).toContain('312 valid · 4 invalid')
+    const link = wrapper.findAll('a').find((a) => a.text().includes('Write and send'))!
+    expect(link.attributes('href')).toBe('/bulk-emails/new?batch=42')
+    expect(api.listEmails).not.toHaveBeenCalled()
+  })
+
+  it('shows the import progress of a file that is still being checked', async () => {
+    api.getBatch.mockResolvedValue(
+      progress({ status: 'importing', processed_rows: 52000, sent_count: 0, failed_count: 0 }),
+    )
+    const { wrapper } = await mountAt('/bulk-emails/42', BulkEmailDetailView)
+    expect(wrapper.text()).toContain('Checking the file')
+    expect(wrapper.text()).toContain('52,000 rows read')
   })
 })

@@ -4,16 +4,16 @@ import { computed, shallowRef } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import KpiTile from '@/components/ui/KpiTile.vue'
 import StatusTabs, { type TabOption } from '@/components/ui/StatusTabs.vue'
-import { TAB_KINDS, tabCount, tidyReason, type ProblemTab } from '@/lib/problems'
-import { useUploadProblems } from '@/queries/useUploads'
-import type { UploadSummary } from '@/types/api'
+import { reasonText, TAB_FILTER, tabCount, type ProblemTab } from '@/lib/problems'
+import { useIssues } from '@/queries/useBatches'
+import type { Batch } from '@/types/api'
 
-const props = defineProps<{ result: UploadSummary }>()
+const props = defineProps<{ result: Batch }>()
 
 const tab = shallowRef<ProblemTab>('all')
 
-const valid = computed(() => props.result.valid_count)
-const skipped = computed(() => props.result.problem_count)
+const valid = computed(() => props.result.valid_count + props.result.unverified_count)
+const skipped = computed(() => props.result.invalid_count)
 const unverified = computed(() => props.result.unverified_count)
 
 const tabs = computed<TabOption<ProblemTab>[]>(() =>
@@ -21,7 +21,6 @@ const tabs = computed<TabOption<ProblemTab>[]>(() =>
     [
       ['all', 'All problems'],
       ['invalid', 'Invalid'],
-      ['duplicate', 'Duplicate'],
       ['domain', 'Bad domain'],
       ['unverified', 'Unverified'],
     ] as const
@@ -29,9 +28,9 @@ const tabs = computed<TabOption<ProblemTab>[]>(() =>
 )
 
 // Rows come from the server a page at a time; only the pages looked at are kept.
-const problems = useUploadProblems(
-  () => props.result.upload_id,
-  () => TAB_KINDS[tab.value],
+const problems = useIssues(
+  () => props.result.id,
+  () => TAB_FILTER[tab.value],
 )
 const rows = computed(() => problems.data.value?.pages.flatMap((p) => p.items) ?? [])
 const shown = computed(() => rows.value.length)
@@ -48,7 +47,7 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
         tone="danger"
         label="Will be skipped"
         :value="skipped"
-        caption="invalid, duplicate or bad domain"
+        caption="invalid or bad domain"
       />
       <KpiTile
         soft
@@ -86,12 +85,12 @@ const rowTone = computed(() => (tab.value === 'unverified' ? 'text-warn-ink' : '
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="`${tab}-${row.row}`" class="border-hairline border-t">
+            <tr v-for="row in rows" :key="`${tab}-${row.id}`" class="border-hairline border-t">
               <td class="text-muted py-2.5 pr-3 pl-2.5 tabular-nums">{{ row.row }}</td>
               <td class="text-user px-2.5 py-2.5 font-semibold">{{ row.name || '(empty)' }}</td>
               <td class="px-2.5 py-2.5 break-all">{{ row.email || '(empty)' }}</td>
               <td class="text-user px-2.5 py-2.5 text-[0.8125rem]" :class="rowTone">
-                {{ tidyReason(row.reason ?? '') }}
+                {{ reasonText(row) }}
               </td>
             </tr>
             <tr v-if="rows.length === 0 && !problems.isPending.value && !problems.isError.value">

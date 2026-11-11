@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { shallowRef, useTemplateRef } from 'vue'
 
+import type { ChosenFile } from '@/composables/useSpreadsheetUpload'
 import { formatNumber } from '@/lib/format'
 
 defineProps<{
-  file: File | null
-  /** True while the server is checking the file. */
-  checking: boolean
-  /** Problem with the file or the server's answer. */
+  file: ChosenFile | null
+  /** True while the file is uploading or the server is checking it. */
+  busy: boolean
+  /** What is happening while busy, e.g. "Uploading 40%". */
+  busyText: string
+  /** Problem with the file, the upload or the check. */
   error: string
   /** Largest accepted file, from the MAX_UPLOAD_MB setting. */
   maxMb: number
@@ -54,10 +57,10 @@ function size(bytes: number) {
       >
       <div class="min-w-0">
         <b class="block truncate text-sm">{{ file.name }}</b>
-        <span class="text-muted text-[0.8125rem]">{{ size(file.size) }}</span>
+        <span v-if="file.size" class="text-muted text-[0.8125rem]">{{ size(file.size) }}</span>
       </div>
       <button
-        v-if="!checking"
+        v-if="!busy"
         type="button"
         class="bg-track hover:bg-hover ml-auto cursor-pointer rounded-full px-3.5 py-2 text-[0.8125rem] font-semibold"
         @click="emit('clear')"
@@ -66,7 +69,7 @@ function size(bytes: number) {
       </button>
     </div>
     <p
-      v-if="file && checking"
+      v-if="file && busy"
       class="bg-note rounded-inner mt-3.5 flex items-center gap-2.5 px-4 py-3.5 text-sm"
       role="status"
     >
@@ -74,7 +77,7 @@ function size(bytes: number) {
         class="border-track border-t-ink size-4 animate-spin rounded-full border-[2.5px] motion-reduce:animate-none"
         aria-hidden="true"
       />
-      Checking every row. Nothing is sent yet.
+      {{ busyText }}
     </p>
     <div
       v-if="!file"

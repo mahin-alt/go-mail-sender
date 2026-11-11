@@ -16,7 +16,7 @@ const RECENT = 5
 
 const range = shallowRef<Range>(14)
 const stats = useStats(range)
-const recent = useBatches({ status: '', q: '', limit: RECENT, offset: 0 })
+const recent = useBatches({ type: 'bulk_send', status: '', q: '', limit: RECENT, offset: 0 })
 
 const tz = timeZone()
 const subtitle = `${todayLabel(new Date(), tz)} · ${tz}`

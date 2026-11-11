@@ -7,34 +7,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { ApiError } from '@/api/errors'
-import type { NewBulkEmail } from '@/api/recipients'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import { usePendingCheckStore } from '@/stores/pendingCheck'
-import type { ProblemParams } from '@/api/uploads'
-import type { CreateBatchResult, ProblemPage, SettingItem, UploadRow, UploadSummary } from '@/types/api'
+import type { SettingItem } from '@/types/api'
 import NewBulkEmailView from '@/views/NewBulkEmailView.vue'
 import VerifyEmailsView from '@/views/VerifyEmailsView.vue'
-import { fakeUpload, typicalRows } from './uploadFakes'
+import { batchesApiMock, serverHas as fakeServer, typicalRows, type FakeRow } from './uploadFakes'
 
-const api = vi.hoisted(() => ({
-  createBatch: vi.fn<(input: NewBulkEmail) => Promise<CreateBatchResult>>(),
-}))
-vi.mock('@/api/recipients', () => api)
+const api = vi.hoisted(() => ({}) as ReturnType<typeof batchesApiMock>)
+vi.mock('@/api/batches', async () => {
+  const { batchesApiMock } = await import('./uploadFakes')
+  return Object.assign(api, batchesApiMock())
+})
 
-const uploads = vi.hoisted(() => ({
-  createUpload: vi.fn<(file: File) => Promise<UploadSummary>>(),
-  listUploadProblems: vi.fn<(id: number, params?: ProblemParams) => Promise<ProblemPage>>(),
-  getUploadSample: vi.fn<(id: number, limit?: number) => Promise<UploadRow[]>>(),
-}))
-vi.mock('@/api/uploads', () => uploads)
-
-/** Make the server answer as if the chosen file held these rows. */
-function serverHas(rows: UploadRow[]) {
-  const fake = fakeUpload(rows)
-  uploads.createUpload.mockResolvedValue(fake.summary)
-  uploads.listUploadProblems.mockImplementation(fake.problems)
-  uploads.getUploadSample.mockImplementation(fake.sample)
+/** Make the server answer as if the chosen file held these rows (a verification batch). */
+function serverHas(rows: FakeRow[]) {
+  return fakeServer(api, rows, { type: 'verification' })
 }
 
 const settingsApi = vi.hoisted(() => ({
@@ -82,7 +70,6 @@ const button = (w: W, text: string) => w.findAll('button').find((b) => b.text().
 beforeEach(() => {
   queryClient.clear()
   Object.values(api).forEach((fn) => fn.mockReset())
-  Object.values(uploads).forEach((fn) => fn.mockReset())
   serverHas(typicalRows)
   settingsApi.getSettings.mockReset()
   settingsApi.getSettings.mockResolvedValue([uploadLimit(10)])
@@ -103,25 +90,25 @@ describe('Verify Emails page', () => {
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     const file = xlsx()
     await choose(wrapper, file)
-    expect(uploads.createUpload).toHaveBeenCalledWith(file)
+    expect(api.uploadSpreadsheet).toHaveBeenCalledWith('verification', file, expect.any(Function))
     expect(wrapper.text()).toContain('Ready to send')
     expect(wrapper.text()).toContain('Will be skipped')
     expect(wrapper.text()).not.toContain('rows checked')
     expect(wrapper.text()).not.toContain('would be skipped if you used this file')
     expect(wrapper.text()).not.toContain('will be sent')
     expect(wrapper.findAll('button').some((b) => b.text().startsWith('Send to'))).toBe(false)
-    expect(api.createBatch).not.toHaveBeenCalled()
+    expect(api.sendBatch).not.toHaveBeenCalled()
   })
 
   it('says every row is valid when nothing is wrong', async () => {
-    serverHas(typicalRows.filter((r) => r.kind === 'ok'))
+    serverHas(typicalRows.filter((r) => r.status === 'valid'))
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx())
     expect(wrapper.text()).toContain('Every row is valid')
   })
 
   it('cannot continue when no row is valid', async () => {
-    serverHas(typicalRows.filter((r) => r.kind !== 'ok' && r.kind !== 'unverified'))
+    serverHas(typicalRows.filter((r) => r.status === 'invalid'))
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx())
     expect(wrapper.text()).toContain('No valid emails in this file')
@@ -131,13 +118,35 @@ describe('Verify Emails page', () => {
   it('refuses a file that is not .xlsx and shows the server message for a bad file', async () => {
     const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
     await choose(wrapper, xlsx('notes.csv'))
-    expect(uploads.createUpload).not.toHaveBeenCalled()
+    expect(api.uploadSpreadsheet).not.toHaveBeenCalled()
     expect(wrapper.find('[role="alert"]').text()).toBe('Only .xlsx files are supported.')
-    uploads.createUpload.mockRejectedValue(
-      new ApiError('missing required columns: email', 400, 'http'),
+    api.uploadSpreadsheet.mockRejectedValue(
+      new ApiError('the file is not a valid .xlsx spreadsheet', 400, 'http'),
     )
     await choose(wrapper, xlsx())
-    expect(wrapper.find('[role="alert"]').text()).toBe('missing required columns: email')
+    expect(wrapper.find('[role="alert"]').text()).toBe('the file is not a valid .xlsx spreadsheet')
+  })
+
+  it('shows the reason when the server could not read the file in the background', async () => {
+    const batch = serverHas(typicalRows)
+    api.getBatch.mockResolvedValue({
+      ...batch,
+      status: 'import_failed',
+      import_error: 'sheet must have "name" and "email" columns in its header row',
+    })
+    const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
+    await choose(wrapper, xlsx())
+    expect(wrapper.find('[role="alert"]').text()).toContain('"name" and "email" columns')
+    expect(wrapper.text()).not.toContain('Result')
+  })
+
+  it('shows the import progress while the server reads the file', async () => {
+    const batch = serverHas(typicalRows)
+    api.getBatch.mockResolvedValue({ ...batch, status: 'importing', processed_rows: 120000 })
+    const { wrapper } = await mountAt('/verify-emails', VerifyEmailsView)
+    await choose(wrapper, xlsx())
+    expect(wrapper.find('[role="status"]').text()).toContain('120,000 read so far')
+    expect(wrapper.text()).not.toContain('Result')
   })
 
   it('"Check another file" goes back to an empty upload', async () => {
@@ -148,15 +157,15 @@ describe('Verify Emails page', () => {
     expect(wrapper.text()).not.toContain('Result')
   })
 
-  it('hands the checked file to New Bulk Email, which starts from it without checking again', async () => {
+  it('hands the checked batch to New Bulk Email, which starts from it without uploading again', async () => {
     const { wrapper, router, pinia } = await mountAt('/verify-emails', VerifyEmailsView)
-    const file = xlsx('customers.xlsx')
-    await choose(wrapper, file)
-    expect(uploads.createUpload).toHaveBeenCalledTimes(1)
+    await choose(wrapper, xlsx('customers.xlsx'))
+    expect(api.uploadSpreadsheet).toHaveBeenCalledTimes(1)
     await button(wrapper, 'Continue to New Bulk Email').trigger('click')
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('new-bulk-email'))
+    expect(router.currentRoute.value.query.batch).toBe('7')
 
-    // The next page takes over the same File object and the same result.
+    // The next page opens the same batch by its ID.
     setActivePinia(pinia)
     const next = mount(NewBulkEmailView, {
       attachTo: document.body,
@@ -165,12 +174,11 @@ describe('Verify Emails page', () => {
       },
     })
     await flushPromises()
-    expect(next.text()).toContain('customers.xlsx')
+    expect(next.text()).toContain('orders.xlsx') // the batch's filename, from the server
     expect(next.text()).toContain('Ready to send')
     const send = next.findAll('button').find((b) => b.text() === 'Send')!
-    expect(send.attributes('disabled')).toBeUndefined() // the handed-over file is ready to send
-    expect(uploads.createUpload).toHaveBeenCalledTimes(1) // not uploaded and checked a second time
-    expect(usePendingCheckStore().take()).toBeNull() // and it is only handed over once
+    expect(send.attributes('disabled')).toBeUndefined() // the checked file is ready to send
+    expect(api.uploadSpreadsheet).toHaveBeenCalledTimes(1) // not uploaded a second time
   })
 
   it('New Bulk Email opened directly still starts empty', async () => {

@@ -6,22 +6,20 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import FileUpload from '@/components/wizard/FileUpload.vue'
 import ReviewReport from '@/components/wizard/ReviewReport.vue'
-import { useRecipientCheck } from '@/composables/useRecipientCheck'
-import { usePendingCheckStore } from '@/stores/pendingCheck'
+import { useSpreadsheetUpload } from '@/composables/useSpreadsheetUpload'
 
 const router = useRouter()
-const pending = usePendingCheckStore()
-const check = useRecipientCheck()
+const check = useSpreadsheetUpload('verification')
 
-const uploadError = computed(() => check.fileError.value || check.parseError.value)
-const canContinue = computed(() => (check.result.value?.valid_count ?? 0) > 0)
+const result = computed(() => check.result.value)
+const canContinue = computed(
+  () => !!result.value && result.value.valid_count + result.value.unverified_count > 0,
+)
 
-/** Carry the checked file over so New Bulk Email starts from it instead of asking for it again. */
+/** Send this same checked file: New Bulk Email opens the batch, nothing is uploaded again. */
 function continueToBulkEmail() {
-  const { file, result } = check
-  if (!file.value || !result.value) return
-  pending.hold(file.value, result.value)
-  void router.push({ name: 'new-bulk-email' })
+  if (!result.value) return
+  void router.push({ name: 'new-bulk-email', query: { batch: String(result.value.id) } })
 }
 </script>
 
@@ -35,21 +33,18 @@ function continueToBulkEmail() {
       </h2>
       <FileUpload
         :file="check.file.value"
-        :checking="check.checking.value"
-        :error="uploadError"
+        :busy="check.busy.value"
+        :busy-text="check.busyText.value"
+        :error="check.error.value"
         :max-mb="check.maxUploadMb.value"
         @choose="check.chooseFile"
         @clear="check.clearFile"
       />
     </section>
 
-    <section
-      v-if="check.result.value"
-      class="rounded-tile bg-tile p-6.5"
-      aria-labelledby="verify-result"
-    >
+    <section v-if="result" class="rounded-tile bg-tile p-6.5" aria-labelledby="verify-result">
       <h2 id="verify-result" class="mb-4.5 text-lg font-bold tracking-tight">Result</h2>
-      <ReviewReport :result="check.result.value" />
+      <ReviewReport :result="result" />
 
       <div class="border-hairline mt-4 flex flex-wrap items-center gap-2.5 border-t pt-4">
         <AppButton variant="secondary" @click="check.clearFile">Check another file</AppButton>

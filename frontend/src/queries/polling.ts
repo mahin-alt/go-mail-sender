@@ -6,4 +6,6 @@
 export const POLL_MS = {
   list: 5_000,
   detail: 3_000,
+  /** While a file is being imported: the row counter moves fast. */
+  importing: 1_000,
 } as const

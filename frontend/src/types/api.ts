@@ -4,14 +4,34 @@
  * Only endpoints that exist are typed here.
  */
 
-export type JobStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'invalid' | 'cancelled'
-export type BatchStatus = 'pending' | 'processing' | 'completed' | 'cancelled'
+/** email_jobs.status: one email to deliver. */
+export type JobStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled'
+
+/** email_batches.status. See docs/features/four-table-overhaul.md for the lifecycle. */
+export type BatchStatus =
+  | 'importing'
+  | 'import_failed'
+  | 'draft'
+  | 'generating_jobs'
+  | 'queued'
+  | 'sending'
+  | 'completed'
+  | 'completed_with_errors'
+  | 'failed'
+  | 'cancelled'
+
+/** Which page created the batch. A verification batch becomes `bulk_send` when it is sent. */
+export type BatchType = 'verification' | 'bulk_send'
+
+/** Why a row will not be sent (email_recipients.validation_reason). */
+export type InvalidReason = 'empty_email' | 'empty_name' | 'invalid_email' | 'bad_domain'
 
 /** Standard error body: `{"error": "message"}`. */
 export interface ApiErrorBody {
   error: string
 }
 
+/** Page-numbered list (only GET /batches). */
 export interface Paged<T> {
   items: T[]
   total: number
@@ -19,42 +39,92 @@ export interface Paged<T> {
   offset: number
 }
 
+/** Cursor-paged list: send `next_after` as `after` for the next page; `null` = last page. */
+export interface CursorPage<T> {
+  items: T[]
+  next_after: number | null
+}
+
 /** GET /healthz */
 export interface Health {
   status: string
 }
 
-/** Row of GET /batches. */
-export interface BatchSummary {
+/**
+ * GET /verify/{id}, GET /batches/{id} and the rows of GET /batches: one uploaded file with its
+ * counters. List rows leave `body_template` out.
+ */
+export interface Batch {
   id: number
+  type: BatchType
   filename: string
   status: BatchStatus
-  total: number
-  sent: number
-  failed: number
-  pending: number
-  processing: number
-  invalid: number
-  cancelled: number
+  subject_template: string
+  body_template?: string
+
+  /** Non-empty data rows saved so far (the final count once the import is done). */
+  total_rows: number
+  /** Spreadsheet rows read so far, blank rows included. */
+  processed_rows: number
+  valid_count: number
+  /** Sent too, but the domain could not be checked. */
+  unverified_count: number
+  invalid_count: number
+  invalid_counts: Record<InvalidReason, number>
+  import_error: string | null
+
+  pending_count: number
+  processing_count: number
+  sent_count: number
+  failed_count: number
+  cancelled_count: number
+
+  job_generation_status: 'pending' | 'processing' | 'completed' | 'failed' | null
+  job_generation_error: string | null
+
   created_at: string
-  completed_at?: string
+  updated_at: string
+  send_requested_at: string | null
+  completed_at: string | null
+  cancelled_at: string | null
 }
 
-/** GET /batches/{id} */
-export interface BatchProgress {
+/** POST /verify and POST /batches (202): the import continues in the background. */
+export interface UploadResult {
   batch_id: number
+  type: BatchType
   filename: string
   status: BatchStatus
-  total: number
-  sent: number
-  failed: number
-  pending: number
-  processing: number
-  invalid: number
-  cancelled: number
+}
+
+/** One saved spreadsheet row, from GET .../issues and GET /batches/{id}/sample. */
+export interface Recipient {
+  id: number
+  row: number
+  name: string
+  email: string
+  validation_status: 'valid' | 'unverified' | 'invalid'
+  validation_reason: InvalidReason | null
+}
+
+/** One email of GET /batches/{id}/emails, with subject and body built from the templates. */
+export interface Email {
+  id: number
+  batch_id: number
+  recipient_id: number
+  row: number
+  name: string
+  email: string
+  status: JobStatus
+  attempts: number
+  max_attempts: number
+  last_error: string | null
+  available_at: string
+  sent_at: string | null
   created_at: string
-  completed_at?: string
-  cancelled_at?: string
+  updated_at: string
+  subject: string
+  body: string
 }
 
 /** POST /batches/{id}/cancel */
@@ -62,85 +132,9 @@ export interface CancelResult {
   cancelled: number
 }
 
-/** Row of GET /batches/{id}/jobs (paged form). */
-export interface Job {
-  id: number
-  batch_id: number
-  recipient_name: string
-  recipient_email: string
-  subject: string
-  body: string
-  status: JobStatus
-  attempts: number
-  max_attempts: number
-  last_error?: string
-  locked_at?: string
-  run_at: string
-  created_at: string
-  updated_at: string
-  sent_at?: string
-}
-
 /** POST /batches/{id}/retry and POST /jobs/{id}/retry */
 export interface RetryResult {
   retried: number
-}
-
-/** What the check found for one spreadsheet row. `ok` and `unverified` rows are sent; the rest are skipped. */
-export type RowKind =
-  | 'ok'
-  | 'unverified'
-  | 'empty_email'
-  | 'empty_name'
-  | 'invalid_email'
-  | 'duplicate'
-  | 'bad_domain'
-
-/** Kinds that are skipped (never sent). */
-export type SkippedKind = Exclude<RowKind, 'ok' | 'unverified'>
-
-/** POST /uploads (201) and GET /uploads/{id}: a checked spreadsheet's totals. Never the rows. */
-export interface UploadSummary {
-  upload_id: number
-  filename: string
-  status: 'importing' | 'ready' | 'failed'
-  total_rows: number
-  /** Rows that will be sent: ok + unverified. */
-  valid_count: number
-  /** Rows that will be skipped. */
-  problem_count: number
-  /** Sent, but the domain could not be checked. */
-  unverified_count: number
-  problem_counts: Record<SkippedKind, number>
-  created_at: string
-  expires_at: string
-}
-
-/** One stored spreadsheet row, from GET /uploads/{id}/problems and /sample. */
-export interface UploadRow {
-  row: number
-  name: string
-  email: string
-  kind: RowKind
-  reason?: string
-}
-
-/** GET /uploads/{id}/problems: one page; send `next_after` as `after` for the next one. */
-export interface ProblemPage {
-  items: UploadRow[]
-  next_after: number | null
-}
-
-/** POST /batches (202) */
-export interface CreateBatchResult {
-  batch_id: number
-  filename: string
-  total_rows: number
-  valid_count: number
-  invalid_count: number
-  status: string
-  unverified_count: number
-  message: string
 }
 
 /** GET /stats */

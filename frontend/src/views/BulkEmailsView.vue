@@ -8,20 +8,16 @@ import PaginationBar from '@/components/ui/PaginationBar.vue'
 import SearchBox from '@/components/ui/SearchBox.vue'
 import StatusTabs, { type TabOption } from '@/components/ui/StatusTabs.vue'
 import { PAGE_SIZE, useUrlFilters } from '@/composables/useUrlFilters'
-import { useBatches, useBatchStatusCounts } from '@/queries/useBatches'
-import type { BatchStatus } from '@/types/api'
+import { LIST_TABS, useBatches, useBatchStatusCounts } from '@/queries/useBatches'
 
-const STATUSES = [
-  'pending',
-  'processing',
-  'completed',
-  'cancelled',
-] as const satisfies readonly BatchStatus[]
+const STATUSES = LIST_TABS.filter((tab) => tab !== '')
 
 const { status, q, page, offset, update } = useUrlFilters(STATUSES)
 const counts = useBatchStatusCounts()
 
+// Every file uploaded on New Bulk Email, and every verified file that was sent.
 const params = computed(() => ({
+  type: 'bulk_send' as const,
   status: status.value,
   q: q.value,
   limit: PAGE_SIZE,
@@ -32,9 +28,10 @@ const { data, isPending, isError, error, refetch, isFetching } = useBatches(para
 type Tab = (typeof STATUSES)[number] | ''
 const tabs = computed<TabOption<Tab>[]>(() => [
   { value: '', label: 'All', count: counts.value[''] },
-  { value: 'pending', label: 'Pending', count: counts.value.pending },
-  { value: 'processing', label: 'Processing', count: counts.value.processing },
+  { value: 'draft', label: 'Not sent', count: counts.value.draft },
+  { value: 'sending', label: 'Sending', count: counts.value.sending },
   { value: 'completed', label: 'Completed', count: counts.value.completed },
+  { value: 'completed_with_errors', label: 'With failures', count: counts.value.completed_with_errors },
   { value: 'cancelled', label: 'Cancelled', count: counts.value.cancelled },
 ])
 

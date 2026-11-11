@@ -12,12 +12,13 @@ import type { StatsParams } from '@/api/stats'
 import { attentionReasons, dayLabel, dayOfMonth, queueCaption } from '@/lib/dashboard'
 import { queryClient } from '@/queries/client'
 import { routes } from '@/router/routes'
-import type { AttentionBatch, BatchSummary, Paged, Stats } from '@/types/api'
+import type { AttentionBatch, Batch, Paged, Stats } from '@/types/api'
+import { fakeBatch } from './uploadFakes'
 import DashboardView from '@/views/DashboardView.vue'
 
 const api = vi.hoisted(() => ({
   getStats: vi.fn<(p: StatsParams) => Promise<Stats>>(),
-  listBatches: vi.fn<(p: BatchListParams) => Promise<Paged<BatchSummary>>>(),
+  listBatches: vi.fn<(p: BatchListParams) => Promise<Paged<Batch>>>(),
 }))
 vi.mock('@/api/stats', () => ({ getStats: api.getStats }))
 vi.mock('@/api/batches', () => ({ listBatches: api.listBatches }))
@@ -79,17 +80,14 @@ const stats = (over: Partial<Stats> = {}, days = 14): Stats => ({
   ...over,
 })
 
-const batch = (over: Partial<BatchSummary> = {}): BatchSummary => ({
+const batch = (over: Partial<Batch> = {}): Batch => ({
+  ...fakeBatch([]),
   id: 45,
   filename: 'orders_oct28.xlsx',
   status: 'completed',
-  total: 1000,
-  sent: 1000,
-  failed: 0,
-  pending: 0,
-  processing: 0,
-  invalid: 0,
-  cancelled: 0,
+  total_rows: 1000,
+  valid_count: 1000,
+  sent_count: 1000,
   created_at: new Date().toISOString(),
   ...over,
 })
@@ -249,7 +247,13 @@ describe('Dashboard page', () => {
 
   it('shows the latest five Bulk Emails, asking for no more', async () => {
     const w = await mountPage()
-    expect(api.listBatches).toHaveBeenCalledWith({ status: '', q: '', limit: 5, offset: 0 })
+    expect(api.listBatches).toHaveBeenCalledWith({
+      type: 'bulk_send',
+      status: '',
+      q: '',
+      limit: 5,
+      offset: 0,
+    })
     expect(w.find('[aria-labelledby="recent-title"]').text()).toContain('orders_oct28.xlsx')
     expect(w.find('[aria-labelledby="recent-title"]').text()).toContain('payouts_nov.xlsx')
   })

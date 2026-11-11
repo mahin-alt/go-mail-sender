@@ -14,8 +14,8 @@ describe('StatusBadge', () => {
     expect(mount(StatusBadge, { props: { status: 'failed' } }).classes()).toContain('text-bad-ink')
   })
 
-  it('passes batch context through', () => {
-    const wrapper = mount(StatusBadge, { props: { status: 'completed', failed: 3 } })
-    expect(wrapper.text()).toBe('Completed with failures')
+  it('passes email context through', () => {
+    const wrapper = mount(StatusBadge, { props: { status: 'pending', attempts: 2, maxAttempts: 3 } })
+    expect(wrapper.text()).toBe('Retrying 2 of 3')
   })
 })

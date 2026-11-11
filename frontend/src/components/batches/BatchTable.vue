@@ -4,9 +4,12 @@ import { useRouter } from 'vue-router'
 import ProgressBar from '@/components/ui/ProgressBar.vue'
 import StatusBadge from '@/components/status/StatusBadge.vue'
 import { exactTime, formatNumber, timeAgo } from '@/lib/format'
-import type { BatchSummary } from '@/types/api'
+import type { Batch } from '@/types/api'
 
-defineProps<{ items: BatchSummary[] }>()
+defineProps<{ items: Batch[] }>()
+
+/** Rows that get (or got) an email: valid + unverified. */
+const sendable = (b: Batch) => b.valid_count + b.unverified_count
 
 const router = useRouter()
 
@@ -46,25 +49,25 @@ function open(id: number, event: MouseEvent) {
             <span class="text-muted block text-xs">#{{ batch.id }}</span>
           </td>
           <td class="px-2.5 py-3.5">
-            <StatusBadge :status="batch.status" :failed="batch.failed" />
+            <StatusBadge :status="batch.status" />
           </td>
           <td class="px-2.5 py-3.5">
             <ProgressBar
-              :value="batch.sent"
-              :total="batch.total"
+              :value="batch.sent_count"
+              :total="sendable(batch)"
               :label="`${batch.filename} progress`"
             />
             <span class="text-muted mt-1 block text-xs"
-              >{{ formatNumber(batch.sent) }} / {{ formatNumber(batch.total) }}</span
+              >{{ formatNumber(batch.sent_count) }} / {{ formatNumber(sendable(batch)) }}</span
             >
           </td>
           <td
             class="px-2.5 py-3.5 text-right tabular-nums"
-            :class="batch.failed > 0 && 'text-bad-ink font-semibold'"
+            :class="batch.failed_count > 0 && 'text-bad-ink font-semibold'"
           >
-            {{ formatNumber(batch.failed) }}
+            {{ formatNumber(batch.failed_count) }}
           </td>
-          <td class="px-2.5 py-3.5 text-right tabular-nums">{{ formatNumber(batch.invalid) }}</td>
+          <td class="px-2.5 py-3.5 text-right tabular-nums">{{ formatNumber(batch.invalid_count) }}</td>
           <td
             class="text-muted px-2.5 py-3.5 text-[0.8125rem]"
             :title="exactTime(batch.created_at)"

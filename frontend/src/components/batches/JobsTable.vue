@@ -3,13 +3,12 @@ import { RotateCw } from '@lucide/vue'
 
 import StatusBadge from '@/components/status/StatusBadge.vue'
 import { exactTime, timeAgo } from '@/lib/format'
-import { jobReason } from '@/lib/problems'
-import type { Job } from '@/types/api'
+import type { Email } from '@/types/api'
 
-defineProps<{ jobs: Job[]; retryingId?: number | null }>()
-const emit = defineEmits<{ select: [job: Job]; retry: [job: Job] }>()
+defineProps<{ jobs: Email[]; retryingId?: number | null }>()
+const emit = defineEmits<{ select: [job: Email]; retry: [job: Email] }>()
 
-function onRow(job: Job, event: MouseEvent) {
+function onRow(job: Email, event: MouseEvent) {
   if ((event.target as HTMLElement).closest('button')) return
   emit('select', job)
 }
@@ -41,10 +40,10 @@ function onRow(job: Job, event: MouseEvent) {
               class="text-user cursor-pointer text-left font-semibold hover:underline"
               @click="emit('select', job)"
             >
-              {{ job.recipient_name || job.recipient_email }}
+              {{ job.name || job.email }}
             </button>
-            <span v-if="job.recipient_name" class="text-muted block text-xs">{{
-              job.recipient_email
+            <span v-if="job.name" class="text-muted block text-xs">{{
+              job.email
             }}</span>
           </td>
           <td class="px-2.5 py-3">
@@ -57,7 +56,7 @@ function onRow(job: Job, event: MouseEvent) {
           <td class="px-2.5 py-3 text-right tabular-nums">{{ job.attempts }}</td>
           <td class="text-bad-ink text-user max-w-64 px-2.5 py-3 text-[0.8125rem]">
             <!-- A sent email keeps the error of its earlier failed attempt; it is history, not a problem. -->
-            <span v-if="job.status !== 'sent'" class="line-clamp-2">{{ jobReason(job) }}</span>
+            <span v-if="job.status !== 'sent'" class="line-clamp-2">{{ job.last_error }}</span>
           </td>
           <td class="text-muted px-2.5 py-3 text-[0.8125rem]" :title="exactTime(job.updated_at)">
             {{ timeAgo(job.updated_at) }}
@@ -67,7 +66,7 @@ function onRow(job: Job, event: MouseEvent) {
               v-if="job.status === 'failed'"
               type="button"
               class="bg-pill hover:bg-track grid size-8 cursor-pointer place-items-center rounded-full disabled:opacity-50"
-              :aria-label="`Retry email to ${job.recipient_email}`"
+              :aria-label="`Retry email to ${job.email}`"
               :disabled="retryingId === job.id"
               @click="emit('retry', job)"
             >

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 
 import { ApiError } from '@/api/errors'
@@ -15,19 +15,18 @@ import WizardSection from '@/components/wizard/WizardSection.vue'
 import { useBulkEmailDraft } from '@/composables/useBulkEmailDraft'
 import { formatNumber } from '@/lib/format'
 import { fillTemplate } from '@/lib/template'
-import { usePendingCheckStore } from '@/stores/pendingCheck'
 
+const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const draft = useBulkEmailDraft()
 
 const confirmOpen = shallowRef(false)
 
-// Arriving from Verify Emails with a file that is already checked: start from it.
-const pending = usePendingCheckStore().take()
-if (pending) draft.adopt(pending.file, pending.result)
-
-const uploadError = computed(() => draft.fileError.value || draft.parseError.value)
+// Arriving with ?batch=ID (from Verify Emails, or a draft in the list): start from that file, which
+// the server already checked, instead of uploading it again.
+const adoptId = Number(route.query.batch)
+if (Number.isInteger(adoptId) && adoptId > 0) draft.adopt(adoptId)
 const current = computed(() => draft.samples.value[draft.previewIndex.value])
 const previewSubject = computed(() =>
   current.value ? fillTemplate(draft.subject.value, current.value) : draft.subject.value,
@@ -51,14 +50,15 @@ const confirmMessage = computed(() => {
 async function confirmSend() {
   try {
     const batch = await draft.send()
+    const count = batch.valid_count + batch.unverified_count
     confirmOpen.value = false
     toast.add({
       severity: 'success',
       summary: 'Bulk Email queued',
-      detail: `${formatNumber(batch.valid_count)} ${batch.valid_count === 1 ? 'email is' : 'emails are'} being sent.`,
+      detail: `${formatNumber(count)} ${count === 1 ? 'email is' : 'emails are'} being sent.`,
       life: 5000,
     })
-    await router.push({ name: 'bulk-email-detail', params: { id: batch.batch_id } })
+    await router.push({ name: 'bulk-email-detail', params: { id: batch.id } })
   } catch (error) {
     confirmOpen.value = false
     toast.add({
@@ -80,8 +80,9 @@ async function confirmSend() {
     <WizardSection :number="1" title="Upload your spreadsheet">
       <FileUpload
         :file="draft.file.value"
-        :checking="draft.checking.value"
-        :error="uploadError"
+        :busy="draft.busy.value"
+        :busy-text="draft.busyText.value"
+        :error="draft.error.value"
         :max-mb="draft.maxUploadMb.value"
         @choose="draft.chooseFile"
         @clear="draft.clearFile"

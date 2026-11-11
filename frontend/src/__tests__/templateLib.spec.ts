@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { tabCount } from '@/lib/problems'
-import type { UploadSummary } from '@/types/api'
+import { reasonText, tabCount } from '@/lib/problems'
+import type { Batch } from '@/types/api'
 import { DEFAULT_BODY, DEFAULT_SUBJECT, fillTemplate, unknownFields } from '@/lib/template'
 
 const aisha = { name: 'Aisha', email: 'aisha@shop.example' }
@@ -33,19 +33,30 @@ describe('unknownFields', () => {
 })
 
 describe('tabCount', () => {
-  const summary = {
-    problem_count: 9,
+  const batch = {
+    invalid_count: 7,
     unverified_count: 2,
-    problem_counts: { empty_email: 1, empty_name: 2, invalid_email: 3, duplicate: 2, bad_domain: 1 },
-  } as UploadSummary
+    invalid_counts: { empty_email: 1, empty_name: 2, invalid_email: 3, bad_domain: 1 },
+  } as Batch
 
   it.each([
-    ['all', 9],
+    ['all', 7],
     ['invalid', 6], // empty email + empty name + invalid email
-    ['duplicate', 2],
     ['domain', 1],
     ['unverified', 2],
   ] as const)('%s holds %i rows', (tab, n) => {
-    expect(tabCount(tab, summary)).toBe(n)
+    expect(tabCount(tab, batch)).toBe(n)
+  })
+})
+
+describe('reasonText', () => {
+  it.each([
+    ['empty_email', 'email is empty'],
+    ['empty_name', 'name is empty'],
+    ['invalid_email', 'invalid email'],
+    ['bad_domain', 'domain does not accept mail'],
+    [null, 'could not verify domain'],
+  ] as const)('%s -> %s', (reason, text) => {
+    expect(reasonText({ validation_reason: reason })).toBe(text)
   })
 })

@@ -5,12 +5,11 @@ import Drawer from 'primevue/drawer'
 
 import StatusBadge from '@/components/status/StatusBadge.vue'
 import { exactTime } from '@/lib/format'
-import { jobReason } from '@/lib/problems'
-import type { Job } from '@/types/api'
+import type { Email } from '@/types/api'
 
-defineProps<{ job: Job | null; retrying?: boolean }>()
+defineProps<{ job: Email | null; retrying?: boolean }>()
 const visible = defineModel<boolean>('visible', { required: true })
-const emit = defineEmits<{ retry: [job: Job] }>()
+const emit = defineEmits<{ retry: [job: Email] }>()
 
 /** Floating panel: inset from the screen edge with the tile radius, like every tile. */
 const pt = {
@@ -29,7 +28,7 @@ const pt = {
   <Drawer
     v-model:visible="visible"
     position="right"
-    :header="job?.recipient_name || job?.recipient_email"
+    :header="job?.name || job?.email"
     :pt="pt"
   >
     <div v-if="job" class="flex flex-col gap-4">
@@ -49,7 +48,7 @@ const pt = {
         class="bg-attn text-attn-ink rounded-inner text-user px-3.5 py-3 text-[0.84rem]"
       >
         <b class="block">Last error</b>
-        {{ jobReason(job) }}
+        {{ job.last_error }}
       </div>
 
       <dl class="grid grid-cols-2 gap-3.5 text-sm">
@@ -57,7 +56,7 @@ const pt = {
           <dt class="text-muted mb-1 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
             Recipient
           </dt>
-          <dd class="break-all">{{ job.recipient_email }}</dd>
+          <dd class="break-all">{{ job.email }}</dd>
         </div>
         <div>
           <dt class="text-muted mb-1 text-[0.6875rem] font-semibold tracking-[0.06em] uppercase">
