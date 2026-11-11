@@ -76,9 +76,9 @@ log "results go to $OUT"
 
 # ------------------------------------------------------------ Go benchmark
 if [[ -z ${BENCH_SKIP_GO:-} ]]; then
-	log "Go benchmark: ParseExcelReader x$GO_BENCH_COUNT (about 10 s each)"
+	log "Go benchmark: Scan x$GO_BENCH_COUNT (about 10 s each)"
 	BENCH_XLSX="$PWD/$FILE" go test ./internal/recipients -run '^$' \
-		-bench ParseExcelReader -benchtime 1x -count "$GO_BENCH_COUNT" -timeout 30m \
+		-bench Scan -benchtime 1x -count "$GO_BENCH_COUNT" -timeout 30m \
 		| tee "$OUT/go-bench.txt"
 fi
 
@@ -101,7 +101,7 @@ MAILPIT_PID=$!
 
 # start_server <name>: a fresh API process, so its peak memory belongs to one test.
 start_server() {
-	DATABASE_URL="$BENCH_DB_URL" HTTP_ADDR="$API_ADDR" \
+	DATABASE_URL="$BENCH_DB_URL" HTTP_ADDR="$API_ADDR" UPLOAD_DIR=bin/bench-uploads \
 		SMTP_HOST=127.0.0.1 SMTP_PORT=${SMTP_ADDR##*:} SMTP_USERNAME= SMTP_PASSWORD= \
 		WORKER_COUNT=$WORKERS SMTP_POOL_SIZE=$WORKERS DOMAIN_CHECK_ENABLED=false MAX_UPLOAD_MB=40 \
 		LOG_FILE= LOG_FORMAT=json LOG_LEVEL=${BENCH_LOG_LEVEL:-info} \
@@ -141,7 +141,7 @@ RESULTS="$OUT/results.md"
 	echo '```'
 	if [[ -f $OUT/go-bench.txt ]]; then
 		echo
-		echo "## Go benchmark: ParseExcelReader"
+		echo "## Go benchmark: Scan (read every row, nothing kept)"
 		echo
 		echo '```'
 		grep -E '^(Benchmark|cpu)' "$OUT/go-bench.txt"
@@ -149,70 +149,87 @@ RESULTS="$OUT/results.md"
 	fi
 } >"$RESULTS"
 
+# wait_status <id> <status...>: poll the batch until it has one of the statuses.
+wait_status() {
+	local id=$1 st
+	shift
+	for _ in $(seq 6000); do
+		st=$(curl -s "$API/api/v1/batches/$id" | jq -r .status)
+		for want in "$@"; do [[ $st == "$want" ]] && return 0; done
+		sleep 0.1
+	done
+	echo "batch $id never reached $* (last: $st)" >&2
+	exit 1
+}
+
 # --- 1. Check a file ----------------------------------------------------
-# The check endpoint: POST /uploads since the large-upload Phase 1, before that
-# POST /recipients/parse (the baseline). Whichever this code has is measured.
-if grep -q '"POST /api/v1/uploads"' internal/api/routes.go; then
-	CHECK_PATH=/api/v1/uploads CHECK_MSG='upload checked' CHECK_TIME=total
-else
-	CHECK_PATH=/api/v1/recipients/parse CHECK_MSG='recipients parsed' CHECK_TIME=parse
-fi
-log "POST $CHECK_PATH x$PARSE_RUNS (fresh server each time)"
+# POST /verify answers 202 at once; the import runs in the background. The
+# time below is from the upload until the batch reads "completed".
+log "POST /api/v1/verify x$PARSE_RUNS (fresh server each time)"
 {
 	echo
-	echo "## POST $CHECK_PATH"
+	echo "## POST /api/v1/verify (upload + background import)"
 	echo
-	echo "| run | status | total (s) | response (MB) | server peak memory (MB) | idle memory before (MB) | server time (s) | valid | problems |"
-	echo "|---|---|---|---|---|---|---|---|---|"
+	echo "| run | status | upload answer (s) | until imported (s) | server peak memory (MB) | idle memory before (MB) | import time in log (s) | rows | valid | invalid |"
+	echo "|---|---|---|---|---|---|---|---|---|---|"
 } >>"$RESULTS"
 for run in $(seq "$PARSE_RUNS"); do
 	start_server "parse-$run"
 	idle=$(peak_mb)
-	read -r code total size < <(curl -s -o /dev/null -w '%{http_code} %{time_total} %{size_download}\n' \
-		-F "file=@$FILE" "$API$CHECK_PATH")
+	t0=$(date +%s.%N)
+	read -r code total < <(curl -s -o "$RESPONSE_TMP" -w '%{http_code} %{time_total}\n' \
+		-F "file=@$FILE" "$API/api/v1/verify")
+	id=$(jq -r .batch_id "$RESPONSE_TMP")
+	wait_status "$id" completed import_failed
+	t1=$(date +%s.%N)
 	peak=$(peak_mb)
 	sleep 0.5 # let the log line land
 	L="$OUT/server-parse-$run.log"
-	printf '| %s | %s | %.2f | %.3f | %s | %s | %s | %s | %s |\n' "$run" "$code" "$total" \
-		"$(awk -v b="$size" 'BEGIN {print b / 1048576}')" "$peak" "$idle" \
-		"$(secs "$(log_field "$L" "$CHECK_MSG" "$CHECK_TIME")")" \
-		"$(log_field "$L" "$CHECK_MSG" valid)" "$(log_field "$L" "$CHECK_MSG" problems)" >>"$RESULTS"
+	B=$(curl -s "$API/api/v1/batches/$id")
+	printf '| %s | %s | %.2f | %.2f | %s | %s | %s | %s | %s | %s |\n' "$run" "$code" "$total" \
+		"$(awk -v a="$t0" -v b="$t1" 'BEGIN {print b - a}')" "$peak" "$idle" \
+		"$(secs "$(log_field "$L" 'import finished' took)")" \
+		"$(jq -r .total_rows <<<"$B")" "$(jq -r '.valid_count + .unverified_count' <<<"$B")" \
+		"$(jq -r .invalid_count <<<"$B")" >>"$RESULTS"
 	stop_server
 done
 
-# --- 2. POST /batches ----------------------------------------------------
-log "POST /batches (the workers start sending to the throwaway Mailpit)"
+# --- 2. Upload, Send, job generation -----------------------------------
+log "POST /batches, wait for the import, POST /send (the workers then send to the throwaway Mailpit)"
 start_server batches
 idle=$(peak_mb)
-read -r code total size < <(curl -s -o "$RESPONSE_TMP" -w '%{http_code} %{time_total} %{size_download}\n' \
-	-F "file=@$FILE" -F 'subject=Hello {{.Name}}' \
-	-F $'body=Hi {{.Name}},\n\nThis is a benchmark email for {{.Email}}.' \
-	"$API/api/v1/batches")
+read -r code total < <(curl -s -o "$RESPONSE_TMP" -w '%{http_code} %{time_total}\n' -F "file=@$FILE" "$API/api/v1/batches")
+BATCH_ID=$(jq -r .batch_id "$RESPONSE_TMP")
+[[ $code == 202 && $BATCH_ID != null ]] || { echo "POST /batches failed: HTTP $code" >&2; exit 1; }
+wait_status "$BATCH_ID" draft
+t_send=$(date +%s.%N)
+read -r scode stotal < <(curl -s -o "$RESPONSE_TMP" -w '%{http_code} %{time_total}\n' -X POST \
+	-H 'Content-Type: application/json' \
+	-d '{"subject":"Hello {{.Name}}","body":"Hi {{.Name}},\n\nThis is a benchmark email for {{.Email}}."}' \
+	"$API/api/v1/batches/$BATCH_ID/send")
+[[ $scode == 202 ]] || { echo "POST /send failed: HTTP $scode" >&2; exit 1; }
+wait_status "$BATCH_ID" queued sending completed completed_with_errors
 t_created=$(date +%s.%N)
 peak=$(peak_mb)
-BATCH_ID=$(jq -r .batch_id "$RESPONSE_TMP")
-: >"$RESPONSE_TMP" # keep bin/ small; the file is overwritten next run anyway
-[[ $code == 202 && $BATCH_ID != null ]] || { echo "POST /batches failed: HTTP $code" >&2; exit 1; }
+: >"$RESPONSE_TMP" # keep bin/ small
 sleep 0.5
 L="$OUT/server-batches.log"
 {
 	echo
-	echo "## POST /api/v1/batches"
+	echo "## POST /api/v1/batches/{id}/send (job generation)"
 	echo
-	echo "| status | total (s) | response (MB) | server peak memory (MB) | idle before (MB) | parse (s) | render (s) | insert (s) | pending | invalid |"
-	echo "|---|---|---|---|---|---|---|---|---|---|"
-	printf '| %s | %.2f | %.1f | %s | %s | %s | %s | %s | %s | %s |\n' "$code" "$total" \
-		"$(awk -v b="$size" 'BEGIN {print b / 1048576}')" "$peak" "$idle" \
-		"$(secs "$(log_field "$L" 'batch created' parse)")" \
-		"$(secs "$(log_field "$L" 'batch created' render)")" \
-		"$(secs "$(log_field "$L" 'batch created' insert)")" \
-		"$(log_field "$L" 'batch created' pending)" "$(log_field "$L" 'batch created' invalid)"
+	echo "| send answer (s) | until every email exists (s) | generation time in log (s) | emails created | server peak memory (MB) | idle before (MB) |"
+	echo "|---|---|---|---|---|---|"
+	printf '| %.2f | %.2f | %s | %s | %s | %s |\n' "$stotal" \
+		"$(awk -v a="$t_send" -v b="$t_created" 'BEGIN {print b - a}')" \
+		"$(secs "$(log_field "$L" 'emails created; batch queued for sending' took)")" \
+		"$(log_field "$L" 'emails created; batch queued for sending' created)" "$peak" "$idle"
 	echo
-	echo "Database after the insert: $(psql_q "SELECT pg_size_pretty(pg_total_relation_size('$SCHEMA.email_jobs'))") for \`email_jobs\` (table + indexes), $(psql_q "SELECT count(*) FROM $SCHEMA.email_jobs") rows."
+	echo "Database: $(psql_q "SELECT pg_size_pretty(pg_total_relation_size('$SCHEMA.email_recipients'))") for \`email_recipients\`, $(psql_q "SELECT pg_size_pretty(pg_total_relation_size('$SCHEMA.email_jobs'))") for \`email_jobs\` (tables + indexes), $(psql_q "SELECT count(*) FROM $SCHEMA.email_jobs") email rows."
 } >>"$RESULTS"
 
 # --- 3. Workers ----------------------------------------------------------
-sent_now() { curl -s "$API/api/v1/batches/$BATCH_ID" | jq -r '.sent + .failed'; }
+sent_now() { curl -s "$API/api/v1/batches/$BATCH_ID" | jq -r '.sent_count + .failed_count'; }
 log "workers: counting emails sent for $WORKER_SECONDS s"
 s0=$(sent_now)
 t0=$(date +%s.%N)
@@ -220,13 +237,13 @@ sleep "$WORKER_SECONDS"
 s1=$(sent_now)
 t1=$(date +%s.%N)
 rate=$(awk -v a="$s0" -v b="$s1" -v x="$t0" -v y="$t1" 'BEGIN {printf "%.1f", (b - a) / (y - x)}')
-pending=$(log_field "$L" 'batch created' pending)
+pending=$(curl -s "$API/api/v1/batches/$BATCH_ID" | jq -r .pending_count)
 {
 	echo
 	echo "## Workers (WORKER_COUNT=$WORKERS, SMTP = throwaway Mailpit)"
 	echo
 	echo "- Emails handled (sent + failed) in $WORKER_SECONDS s: $((s1 - s0)) -> **$rate emails/s**"
-	echo "- Already handled when counting started: $s0 (counting starts $(awk -v a="$t_created" -v b="$t0" 'BEGIN {printf "%.1f", b - a}') s after the response)"
+	echo "- Already handled when counting started: $s0 (counting starts $(awk -v a="$t_created" -v b="$t0" 'BEGIN {printf "%.1f", b - a}') s after the emails existed)"
 	awk -v n="$pending" -v r="$rate" 'BEGIN { if (r > 0) printf "- At that rate the %d pending emails take about %.0f minutes\n", n, n / r / 60 }'
 } >>"$RESULTS"
 
@@ -262,13 +279,18 @@ bench_get() { # bench_get <label> <path>
 	printf '| %s `%s` | %s | %s | %s | %.1f |\n' "$1" "$2" "$code" "$med" "$p95" \
 		"$(awk -v b="$size" 'BEGIN {print b / 1024}')" >>"$RESULTS"
 }
-bench_get "batch progress" "/api/v1/batches/$BATCH_ID"
-bench_get "batch list" "/api/v1/batches?limit=20"
-bench_get "jobs, first page" "/api/v1/batches/$BATCH_ID/jobs?limit=50&offset=0"
-bench_get "jobs, deep page" "/api/v1/batches/$BATCH_ID/jobs?limit=50&offset=900000"
-bench_get "jobs, Invalid tab" "/api/v1/batches/$BATCH_ID/jobs?status=invalid&limit=50&offset=0"
-bench_get "jobs, search (no match)" "/api/v1/batches/$BATCH_ID/jobs?q=zz-no-match-zz&limit=50&offset=0"
+DEEP=$(psql_q "SELECT MAX(id) - 100 FROM $SCHEMA.email_jobs WHERE batch_id = $BATCH_ID")
+bench_get "batch summary" "/api/v1/batches/$BATCH_ID"
+bench_get "batch list" "/api/v1/batches?type=bulk_send&limit=20"
+bench_get "emails, first page" "/api/v1/batches/$BATCH_ID/emails?limit=50"
+bench_get "emails, deep page" "/api/v1/batches/$BATCH_ID/emails?limit=50&after=$DEEP"
+bench_get "emails, Sent tab" "/api/v1/batches/$BATCH_ID/emails?status=sent&limit=50"
+bench_get "emails, search (no match)" "/api/v1/batches/$BATCH_ID/emails?q=zz-no-match-zz&limit=50"
+bench_get "issues, all problems" "/api/v1/batches/$BATCH_ID/issues?limit=100"
+bench_get "issues, Bad domain tab" "/api/v1/batches/$BATCH_ID/issues?reason=bad_domain&limit=100"
+bench_get "preview sample" "/api/v1/batches/$BATCH_ID/sample"
 bench_get "dashboard stats" "/api/v1/stats"
 
 stop_server
+rm -rf bin/bench-uploads
 log "done: $RESULTS"

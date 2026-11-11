@@ -1,0 +1,17 @@
+{"time":"2026-11-09T17:01:39.587382698+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-09T17:01:39.587442198+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-09T17:01:39.595108395+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-09T17:01:39.598892347+06:00","level":"INFO","msg":"database schema is up to date"}
+{"time":"2026-11-09T17:01:39.599770455+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-09T17:01:39.60061173+06:00","level":"INFO","msg":"import worker started","worker":"mahin-MS-7D48:775952:import-aab48462"}
+{"time":"2026-11-09T17:01:39.602024308+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-09T17:01:40.129705199+06:00","level":"INFO","msg":"upload received","batch_id":2,"type":"verification","filename":"12_million_mixed.xlsx","took":21000000}
+{"time":"2026-11-09T17:01:40.129783492+06:00","level":"INFO","msg":"request","req_id":"4af5f0fb","method":"POST","path":"/api/v1/verify","status":202,"duration":22000000}
+{"time":"2026-11-09T17:01:57.025211902+06:00","level":"INFO","msg":"import finished","batch_id":2,"import_job":2,"attempt":1,"rows":950040,"resumed_after_row":0,"domain_lookups":0,"took":16894000000,"rate":"56236 rows/s"}
+{"time":"2026-11-09T17:01:57.597909744+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-09T17:01:57.597968174+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-09T17:01:57.598007831+06:00","level":"INFO","msg":"import worker stopped"}
+{"time":"2026-11-09T17:01:57.598024791+06:00","level":"INFO","msg":"job generator stopped"}
+{"time":"2026-11-09T17:01:57.598030058+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-09T17:01:57.5980378+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-09T17:01:57.598044401+06:00","level":"INFO","msg":"graceful shutdown complete"}

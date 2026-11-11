@@ -49,7 +49,7 @@ Goose, numbered SQL files in `internal/migrations/sql/`, embedded in the server 
 
 ## Conventions
 
-- UI copy says **"Bulk Emails"**; the API and database keep the names `batches` and `email_jobs`.
+- UI copy says **"Bulk Emails"**; the API says `batches` (and `verify`), the database `email_batches`, `email_recipients`, `email_import_jobs`, `email_jobs` ([decision 0013](docs/decisions/0013-four-table-data-model.md)).
 - API errors are JSON: `{"error": "message"}`. Validate input before touching the store.
 - Secrets (SMTP password) are never returned by the API or written to logs.
 

@@ -1,0 +1,22 @@
+{"time":"2026-11-09T17:01:22.12591449+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-09T17:01:22.125944607+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-09T17:01:22.128517572+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-09T17:01:22.200482321+06:00","level":"INFO","msg":"applied migration","file":"00001_create_batches_and_email_jobs.sql"}
+{"time":"2026-11-09T17:01:22.200512702+06:00","level":"INFO","msg":"applied migration","file":"00002_create_app_settings.sql"}
+{"time":"2026-11-09T17:01:22.200516928+06:00","level":"INFO","msg":"applied migration","file":"00003_add_stats_indexes.sql"}
+{"time":"2026-11-09T17:01:22.200518985+06:00","level":"INFO","msg":"applied migration","file":"00004_add_cancelled_status.sql"}
+{"time":"2026-11-09T17:01:22.200521277+06:00","level":"INFO","msg":"applied migration","file":"00005_add_uploads.sql"}
+{"time":"2026-11-09T17:01:22.200523692+06:00","level":"INFO","msg":"applied migration","file":"00006_four_table_model.sql"}
+{"time":"2026-11-09T17:01:22.200725766+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-09T17:01:22.200892735+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-09T17:01:22.200904385+06:00","level":"INFO","msg":"import worker started","worker":"mahin-MS-7D48:774844:import-b73fa116"}
+{"time":"2026-11-09T17:01:22.74252676+06:00","level":"INFO","msg":"upload received","batch_id":1,"type":"verification","filename":"12_million_mixed.xlsx","took":27000000}
+{"time":"2026-11-09T17:01:22.742697928+06:00","level":"INFO","msg":"request","req_id":"b1712d6f","method":"POST","path":"/api/v1/verify","status":202,"duration":28000000}
+{"time":"2026-11-09T17:01:38.982936038+06:00","level":"INFO","msg":"import finished","batch_id":1,"import_job":1,"attempt":1,"rows":950040,"resumed_after_row":0,"domain_lookups":0,"took":16239000000,"rate":"58504 rows/s"}
+{"time":"2026-11-09T17:01:39.569007721+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-09T17:01:39.569141571+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-09T17:01:39.569174688+06:00","level":"INFO","msg":"import worker stopped"}
+{"time":"2026-11-09T17:01:39.569193012+06:00","level":"INFO","msg":"job generator stopped"}
+{"time":"2026-11-09T17:01:39.569204696+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-09T17:01:39.569218579+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-09T17:01:39.569232433+06:00","level":"INFO","msg":"graceful shutdown complete"}

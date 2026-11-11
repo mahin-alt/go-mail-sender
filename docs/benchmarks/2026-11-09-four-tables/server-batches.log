@@ -1,0 +1,22 @@
+{"time":"2026-11-09T17:02:14.88160763+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-09T17:02:14.881661167+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-09T17:02:14.887779+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-09T17:02:14.895120739+06:00","level":"INFO","msg":"database schema is up to date"}
+{"time":"2026-11-09T17:02:14.895768277+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-09T17:02:14.896037777+06:00","level":"INFO","msg":"import worker started","worker":"mahin-MS-7D48:778165:import-815ddfde"}
+{"time":"2026-11-09T17:02:14.896987503+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-09T17:02:15.44822298+06:00","level":"INFO","msg":"upload received","batch_id":4,"type":"bulk_send","filename":"12_million_mixed.xlsx","took":29000000}
+{"time":"2026-11-09T17:02:15.448315554+06:00","level":"INFO","msg":"request","req_id":"48e5ae2d","method":"POST","path":"/api/v1/batches","status":202,"duration":29000000}
+{"time":"2026-11-09T17:02:31.476387507+06:00","level":"INFO","msg":"import finished","batch_id":4,"import_job":4,"attempt":1,"rows":950040,"resumed_after_row":0,"domain_lookups":0,"took":16026000000,"rate":"59279 rows/s"}
+{"time":"2026-11-09T17:02:31.592017136+06:00","level":"INFO","msg":"send requested","batch_id":4}
+{"time":"2026-11-09T17:02:31.592690398+06:00","level":"INFO","msg":"request","req_id":"38a41446","method":"POST","path":"/api/v1/batches/4/send","status":202,"duration":3000000}
+{"time":"2026-11-09T17:02:42.300053615+06:00","level":"INFO","msg":"emails created; batch queued for sending","batch_id":4,"attempt":1,"created":880533,"took":10707000000}
+{"time":"2026-11-09T17:03:49.942998202+06:00","level":"INFO","msg":"batch cancelled","batch_id":4,"cancelled":861312}
+{"time":"2026-11-09T17:03:49.943092521+06:00","level":"INFO","msg":"request","req_id":"b4d0eed3","method":"POST","path":"/api/v1/batches/4/cancel","status":200,"duration":6710000000}
+{"time":"2026-11-09T17:04:07.724339148+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-09T17:04:07.724391746+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-09T17:04:07.724411623+06:00","level":"INFO","msg":"import worker stopped"}
+{"time":"2026-11-09T17:04:07.724428964+06:00","level":"INFO","msg":"job generator stopped"}
+{"time":"2026-11-09T17:04:07.724434341+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-09T17:04:07.724656372+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-09T17:04:07.724667242+06:00","level":"INFO","msg":"graceful shutdown complete"}

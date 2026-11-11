@@ -1,0 +1,4 @@
+time="2026/11/09 17:01:22" level=info msg="[smtpd] starting on 127.0.0.1:1026 (no encryption)"
+time="2026/11/09 17:01:22" level=info msg="[http] starting on 127.0.0.1:8026"
+time="2026/11/09 17:01:22" level=info msg="[http] accessible via http://127.0.0.1:8026/"
+[db] got terminated signal, shutting down

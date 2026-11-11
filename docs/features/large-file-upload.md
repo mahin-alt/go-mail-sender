@@ -7,9 +7,9 @@
 ## Where we left off
 > Update this at the end of every chunk of work, in the same commit. A new session reads this first.
 - **Last done:** (2026-11-08) **Phase 1** on `feat/upload-check-storage`: check results stored in new `uploads` + `upload_rows` tables (migration 00005), streaming parser (`recipients.Scan`), `POST /uploads` returning totals only, paged `GET /uploads/{id}/problems`, `GET /uploads/{id}/sample` for the preview, hourly cleanup of expired uploads, `/recipients/parse` retired, `/batches` no longer returns problem lists, jobs list always paged. Frontend: Verify Emails and New Bulk Email use the upload summary, the review table pages with "Load more", the preview reads the sample endpoint. Go tests (with DB tests on a scratch schema), lint, type-check, Vitest and build pass; the 1M sample was checked in the real UI on a scratch schema (see Verification), and benchmarked (see "Phase 1 numbers").
-- **Next:** Phase 2 (new branch from `main` after this one is merged): Send from the `upload_id` instead of re-uploading, render at send time, faster domain check, background import.
-- **Blocked on / waiting for the user:** review and commit Phase 1; then the go-ahead for Phase 2 and its open questions below.
-- **Updated:** 2026-11-08 (Phase 1)
+- **Next:** Phases 2-3 below are **replaced** by the [four-table overhaul](four-table-overhaul.md) ([decision 0013](../decisions/0013-four-table-data-model.md)), agreed 2026-11-09. Continue there; this doc stays as the history of Phase 1 and the benchmarks.
+- **Blocked on / waiting for the user:** nothing here.
+- **Updated:** 2026-11-09 (superseded by the four-table overhaul)
 
 ## Why
 Staff want to check and send spreadsheets of a million rows or more. The upload limit was a hard-coded 10 MB, and the 1M-row sample (`samples/12_million_mixed.xlsx`) is 18 MB. With the limit raised, a 1M-row check crashed the browser tab (out of memory), and the server held the whole file in memory at every step.

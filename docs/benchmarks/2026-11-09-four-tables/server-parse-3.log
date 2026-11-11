@@ -1,0 +1,17 @@
+{"time":"2026-11-09T17:01:57.606743778+06:00","level":"INFO","msg":"logging ready","log_level":"info","log_format":"json","log_file":""}
+{"time":"2026-11-09T17:01:57.606778855+06:00","level":"INFO","msg":"connecting to database"}
+{"time":"2026-11-09T17:01:57.610627186+06:00","level":"INFO","msg":"database connected"}
+{"time":"2026-11-09T17:01:57.617749862+06:00","level":"INFO","msg":"database schema is up to date"}
+{"time":"2026-11-09T17:01:57.618191181+06:00","level":"INFO","msg":"starting email workers","count":5,"poll_interval":500000000}
+{"time":"2026-11-09T17:01:57.61847865+06:00","level":"INFO","msg":"server listening","addr":"127.0.0.1:8095","workers":5,"smtp_pool":5}
+{"time":"2026-11-09T17:01:57.618643723+06:00","level":"INFO","msg":"import worker started","worker":"mahin-MS-7D48:777067:import-8c66e4ff"}
+{"time":"2026-11-09T17:01:58.146456851+06:00","level":"INFO","msg":"upload received","batch_id":3,"type":"verification","filename":"12_million_mixed.xlsx","took":25000000}
+{"time":"2026-11-09T17:01:58.146838008+06:00","level":"INFO","msg":"request","req_id":"6f95f82c","method":"POST","path":"/api/v1/verify","status":202,"duration":25000000}
+{"time":"2026-11-09T17:02:14.173620518+06:00","level":"INFO","msg":"import finished","batch_id":3,"import_job":3,"attempt":1,"rows":950040,"resumed_after_row":0,"domain_lookups":0,"took":16026000000,"rate":"59283 rows/s"}
+{"time":"2026-11-09T17:02:14.85801773+06:00","level":"INFO","msg":"shutting down","signal":"terminated"}
+{"time":"2026-11-09T17:02:14.858253347+06:00","level":"INFO","msg":"http server stopped"}
+{"time":"2026-11-09T17:02:14.858356129+06:00","level":"INFO","msg":"import worker stopped"}
+{"time":"2026-11-09T17:02:14.858385818+06:00","level":"INFO","msg":"job generator stopped"}
+{"time":"2026-11-09T17:02:14.85840712+06:00","level":"INFO","msg":"email workers stopped"}
+{"time":"2026-11-09T17:02:14.85843783+06:00","level":"INFO","msg":"smtp pool closed"}
+{"time":"2026-11-09T17:02:14.858465108+06:00","level":"INFO","msg":"graceful shutdown complete"}

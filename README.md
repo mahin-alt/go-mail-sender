@@ -1,11 +1,14 @@
 # go-mail-sender
 
-An asynchronous, scalable email processing API in Go. Accepts Excel files (`.xlsx`), parses recipients, renders personalized greetings via Go templates, and dispatches emails using background Go worker goroutines backed by PostgreSQL (`FOR UPDATE SKIP LOCKED`) and a connection-pooled SMTP engine (Mailpit / Mailtrap / production).
+An asynchronous, scalable email processing API in Go. Accepts Excel files (`.xlsx`, up to about a million rows), checks every row in the background, and, after an explicit Send, dispatches personalized emails using background Go workers backed by PostgreSQL (`FOR UPDATE SKIP LOCKED`) and a connection-pooled SMTP engine (Mailpit / Mailtrap / production).
+
+Data model (decision [0013](docs/decisions/0013-four-table-data-model.md)): one uploaded file is one row in `email_batches`; every spreadsheet row is saved once in `email_recipients` (valid, unverified or invalid), which both Verify Emails and New Bulk Email read; `email_import_jobs` is the background import with a checkpoint; `email_jobs` holds one email to deliver per sendable row, created after Send. Emails are built from the batch's templates at send time.
 
 ## Features
 
-- **Excel Parsing**: Automatically extracts recipient names and emails from `.xlsx` files with row-level validation.
-- **Batches & Bulk Jobs**: Upload an Excel file to create a single Batch with individual, trackable email jobs.
+- **Background import**: The upload streams the file to disk and answers `202` at once; a worker reads it row by row in chunks of 1,000, each saved with a checkpoint, so a crash resumes where it stopped. 950k rows import in about 17 seconds with the whole server under 70 MB.
+- **Verify first, send later**: A checked file is a batch on the server; it can be sent later without uploading again.
+- **Row checks**: Format, empty name/email, and an optional DNS/MX domain check. Duplicate addresses are sent like any other row.
 - **Personalized Templating**: Uses Go's `text/template` engine to customize subjects and bodies with `{{.Name}}` and `{{.Email}}`.
 - **PostgreSQL Job Queue**: Concurrency-safe job claiming using `SELECT ... FOR UPDATE SKIP LOCKED` (no duplicate sends, no lock contention).
 - **SMTP Connection Pool**: Configurable persistent connection pool to reuse SMTP connections and protect mail servers from socket exhaustion.
@@ -40,17 +43,19 @@ A Postman collection with every endpoint is in [postman/go-mail-sender.postman_c
 |---|---|---|---|
 | `GET /healthz` | Liveness check | - | `200 {"status":"ok"}` |
 | `POST /api/v1/emails` | Synchronous single email | JSON: `{"to","subject","body"}` | `200 {"message":"email sent"}` |
-| `POST /api/v1/uploads` | **Check a spreadsheet** (nothing is sent). The file is read row by row and every row is kept for 24 hours with its kind: `ok`, `unverified` (sent, domain not checked), or skipped: `empty_email`, `empty_name`, `invalid_email`, `duplicate`, `bad_domain`. Returns totals only, never the rows | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`) | `201 {"upload_id":1,"filename":"...","status":"ready","total_rows":950040,"valid_count":780493,"problem_count":169547,"unverified_count":0,"problem_counts":{"empty_email":69507,"bad_domain":100040,...},"expires_at":"..."}`, `400` bad file, `413` over the limit |
-| `GET /api/v1/uploads/{id}` | **Totals of a checked file** | URL parameter `id` | `200` same shape as above, `404` unknown or expired |
-| `GET /api/v1/uploads/{id}/problems` | **One page of a checked file's problem rows**, in row order. Pass `next_after` back as `after` for the next page | Query: `kind` (comma separated; default every skipped kind; `unverified` allowed), `q` (name/email), `after` (row number), `limit` (default 100, max 500) | `200 {"items":[{"row":4,"name":"...","email":"...","kind":"bad_domain","reason":"..."}],"next_after":616}` (`null` on the last page) |
-| `GET /api/v1/uploads/{id}/sample` | **First rows that will be sent**, for the email preview | Query: `limit` (default 5, max 20) | `200 {"items":[{"row":2,"name":"...","email":"...","kind":"ok"}]}` |
-| `POST /api/v1/batches` | **Queue background email campaign** (the file is checked again; the rows are not returned, the job list shows them) | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`), `subject`, `body` | `202 {"batch_id":1,"total_rows":42,"valid_count":38,"invalid_count":4,"unverified_count":0}` |
-| `GET /api/v1/batches/{id}` | **Check campaign progress & counts** | URL parameter `id` | `200 {"batch_id":1,"status":"completed","sent":38,"invalid":4,"created_at":"...","completed_at":"..."}` |
-| `GET /api/v1/batches` | **List batches with job counts** | Query: `status`, `q` (filename), `limit` (default 20, max 100), `offset` | `200 {"items":[{"id":1,"filename":"...","status":"completed","total":42,"sent":38,"failed":0,"invalid":4}],"total":1,"limit":20,"offset":0}` |
-| `GET /api/v1/batches/{id}/jobs` | **Paged job list** (always paged) | Query: `status`, `q` (email/name), `limit` (default 20, max 100), `offset` | `200 {"items":[{"id":4,"recipient_email":"...","status":"invalid","last_error":"..."}],"total":42,"limit":20,"offset":0}` |
-| `POST /api/v1/batches/{id}/retry` | **Requeue all failed jobs in a batch** (invalid and cancelled rows are skipped) | none | `200 {"retried":3}`, `409` if the batch was cancelled |
-| `POST /api/v1/batches/{id}/cancel` | **Stop a batch that is still sending.** Unsent (`pending`) emails become `cancelled` and are never sent or retried; an email being sent right now finishes | none | `200 {"cancelled":630036}`, `404`, `409` if the batch already finished or was cancelled |
-| `POST /api/v1/jobs/{id}/retry` | **Requeue one failed job** | none | `200 {"retried":1}`, `404` if not failed |
+| `POST /api/v1/verify` | **Check a spreadsheet** (nothing is sent). The file is streamed to `UPLOAD_DIR` and checked in the background; poll the batch for progress | `multipart/form-data`: `file` (up to `MAX_UPLOAD_MB`) | `202 {"batch_id":3,"type":"verification","filename":"...","status":"importing"}`, `400` not an `.xlsx`, `413` over the limit |
+| `GET /api/v1/verify/{id}` | **Batch summary and import progress** (same as `GET /batches/{id}`) | URL parameter `id` | `200` batch object (below), `404` |
+| `GET /api/v1/verify/{id}/issues` | **One page of the rows that will not be sent**, in row order. Pass `next_after` back as `after` | Query: `status` (`invalid` default, or `unverified`), `reason` (comma separated: `empty_email`, `empty_name`, `invalid_email`, `bad_domain`), `q` (name/email), `after`, `limit` (default 100, max 500) | `200 {"items":[{"id":4,"row":4,"name":"...","email":"...","validation_status":"invalid","validation_reason":"bad_domain"}],"next_after":616}` (`null` on the last page) |
+| `POST /api/v1/batches` | **Upload a spreadsheet to send to.** Like `/verify`; the batch ends as `draft` after its import | `multipart/form-data`: `file` | `202 {"batch_id":2,"type":"bulk_send","status":"importing",...}` |
+| `GET /api/v1/batches` | **List batches** newest first | Query: `type` (`verification`, `bulk_send`), `status`, `q` (filename), `limit` (default 20, max 100), `offset` | `200 {"items":[batch...],"total":1,"limit":20,"offset":0}` (list rows leave `body_template` out) |
+| `GET /api/v1/batches/{id}` | **Batch summary**: status, counters, import and delivery progress. Cheap, safe to poll | URL parameter `id` | `200 {"id":2,"type":"bulk_send","filename":"...","status":"sending","subject_template":"...","body_template":"...","total_rows":950040,"processed_rows":1000001,"valid_count":780493,"unverified_count":0,"invalid_count":169547,"invalid_counts":{"bad_domain":100040,...},"import_error":null,"pending_count":779734,"processing_count":3,"sent_count":756,"failed_count":0,"cancelled_count":0,"job_generation_status":"completed","send_requested_at":"...","completed_at":null,...}` |
+| `GET /api/v1/batches/{id}/issues` | Same as `/verify/{id}/issues` | | |
+| `GET /api/v1/batches/{id}/sample` | **First rows that will be sent**, for the email preview | Query: `limit` (default 5, max 20) | `200 {"items":[{"id":2,"row":2,"name":"...","email":"...","validation_status":"valid"}]}` |
+| `POST /api/v1/batches/{id}/send` | **The explicit Send.** Saves the templates (validated: syntax, only `{{.Name}}`/`{{.Email}}`, one-line subject) and starts creating the emails. Works for a `draft` bulk batch and for a `completed` verification batch (which becomes `bulk_send`) | JSON `{"subject":"Hi {{.Name}}","body":"..."}` | `202` batch object, `400` bad template, `404`, `409` not sendable (importing, already sent, cancelled) or no valid rows |
+| `GET /api/v1/batches/{id}/emails` | **One page of the batch's emails** and their delivery state, with subject and body built from the templates | Query: `status` (`pending`, `processing`, `sent`, `failed`, `cancelled`), `q` (name/email), `after`, `limit` (default 20, max 100) | `200 {"items":[{"id":7,"row":2,"name":"...","email":"...","status":"failed","attempts":1,"last_error":"rcpt to ...: 550 no such user","subject":"...","body":"..."}],"next_after":7}` |
+| `POST /api/v1/batches/{id}/retry` | **Requeue every failed email** of the batch with fresh attempts | none | `200 {"retried":3}`, `409` if the batch was cancelled |
+| `POST /api/v1/batches/{id}/cancel` | **Stop a batch** that is preparing or sending its emails. Unsent emails become `cancelled`; an email being sent right now finishes | none | `200 {"cancelled":779712}`, `404`, `409` if there is nothing to stop |
+| `POST /api/v1/jobs/{id}/retry` | **Requeue one failed email** | none | `200 {"retried":1}`, `404` if not failed |
 | `GET /api/v1/stats` | **Overview numbers**: today's sent/failed, queue, daily series, batches needing attention | Query: `days` (1-90, default 14), `tz` (IANA name, default `UTC`) | `200 {"today":{"sent":59,"failed":5},"queue":{"pending":53,"retrying":3,"processing":5},"failed_total":8,"active_batches":1,"daily":[{"date":"2026-10-27","sent":59,"failed":5}],"needs_attention":[{"batch_id":2,"reasons":["failed_jobs"],...}]}` |
 | `GET /api/v1/settings` | **List editable settings** with effective value, source (`env`/`override`), `apply` (`instant`/`restart`/`readonly`) and `restart_required`. Secrets are never returned | none | `200 {"items":[{"key":"SMTP_HOST","value":"localhost","source":"env","apply":"instant",...}]}` |
 | `PUT /api/v1/settings` | **Change or reset settings.** All-or-nothing. Changing SMTP settings first opens a real connection with the new values and refuses the save if it fails | JSON `{"values":{"SMTP_HOST":"smtp.example.com"},"reset":["MAIL_FROM"]}` | `200 {"items":[...]}`, `400 {"error":"..."}` |
@@ -60,66 +65,47 @@ A Postman collection with every endpoint is in [postman/go-mail-sender.postman_c
 
 ## Examples
 
-### 1. Queue an Email Campaign from an Excel File
+### 1. Upload a file (it is checked in the background)
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/batches \
-  -F "file=@samples/1_valid.xlsx" \
-  -F "subject=Hello {{.Name}}" \
-  -F "body=Hi {{.Name}},\n\nWelcome to our platform!"
+curl -s -F "file=@samples/1_valid.xlsx" http://localhost:8080/api/v1/batches
+# {"batch_id":1,"type":"bulk_send","filename":"1_valid.xlsx","status":"importing"}
 ```
 
-Response:
-```json
-HTTP/1.1 202 Accepted
-Content-Type: application/json
-
-{
-  "batch_id": 1,
-  "filename": "1_valid.xlsx",
-  "total_recipients": 5,
-  "status": "pending",
-  "message": "batch accepted and email jobs queued for processing"
-}
-```
-
-### 2. Check Campaign Progress
+### 2. Wait for the check, look at the problems
 
 ```bash
-curl -i http://localhost:8080/api/v1/batches/1
+curl -s http://localhost:8080/api/v1/batches/1          # "status":"draft" once imported
+curl -s http://localhost:8080/api/v1/batches/1/issues   # rows that will not be sent
 ```
 
-Response:
-```json
-HTTP/1.1 200 OK
-Content-Type: application/json
+### 3. Send it, then follow the delivery
 
-{
-  "batch_id": 1,
-  "filename": "1_valid.xlsx",
-  "status": "completed",
-  "total": 5,
-  "sent": 5,
-  "failed": 0,
-  "pending": 0,
-  "processing": 0
-}
+```bash
+curl -s -X POST http://localhost:8080/api/v1/batches/1/send \
+  -H 'Content-Type: application/json' \
+  -d '{"subject":"Hello {{.Name}}","body":"Hi {{.Name}},\n\nWelcome to our platform!"}'
+curl -s http://localhost:8080/api/v1/batches/1           # generating_jobs -> queued -> sending -> completed
+curl -s "http://localhost:8080/api/v1/batches/1/emails?status=failed"
 ```
+
+Lifecycle of a batch: `importing` -> `draft` (bulk) or `completed` (verification) -> Send -> `generating_jobs` -> `queued` -> `sending` -> `completed` / `completed_with_errors`; `cancelled` from any sending state; `import_failed` when the file cannot be read.
 
 ---
 
 ## Architecture & Project Layout
 
 ```
-cmd/server/main.go            entry point - wires config, database, smtp pool, worker pool, http server
+cmd/server/main.go            entry point - wires config, database, smtp pool, the background workers, http server
 internal/config/              reads settings from process env / .env
 internal/logging/             log/slog setup (levels, text/json, optional log file) and email masking
 internal/template/            personalized template engine using text/template
-internal/recipients/          Excel .xlsx parser and validation
-internal/store/               batches, settings, stats, and the FOR UPDATE SKIP LOCKED job queue
+internal/recipients/          streaming Excel .xlsx reader and row validation
+internal/importer/            upload files on disk + the background import worker (chunks, checkpoint, lease)
+internal/store/               batches, recipients, import / generation tasks, the email queue, settings, stats
 internal/migrations/          the database schema as numbered SQL files (goose), embedded in the binary
 internal/mailer/              SMTP connection pool and message delivery
-internal/worker/              background Go worker goroutines with graceful shutdown
+internal/worker/              job generator (emails created after Send) and the sending pool
 internal/api/                 HTTP routes, handlers, validation, CORS and the request log
 ```
 
@@ -172,6 +158,9 @@ The database schema is defined by numbered SQL files in [internal/migrations/sql
 | `00001_create_batches_and_email_jobs.sql` | the original tables and the job-queue indexes |
 | `00002_create_app_settings.sql` | settings edited from the dashboard |
 | `00003_add_stats_indexes.sql` | indexes that keep the Overview stats fast |
+| `00004_add_cancelled_status.sql` | the `cancelled` status and status CHECK constraints |
+| `00005_add_uploads.sql` | checked spreadsheets (`uploads`, `upload_rows`), replaced by 00006 |
+| `00006_four_table_model.sql` | **drops** the old `batches`, `email_jobs`, `uploads`, `upload_rows` (no data copied) and creates `email_batches`, `email_recipients`, `email_import_jobs`, `email_jobs`; `app_settings` is kept. Back up first (`pg_dump`) |
 
 Every file has an **Up** section (apply the change) and a **Down** section (undo it).
 
@@ -225,7 +214,7 @@ Numbers are the leading digits of the file name (`00002_...` is `2`). Note the o
 
 ### Read this before running destructive commands
 
-- **Goose asks for no confirmation.** `goose reset`, `goose down-to ...` and `goose down` run immediately, and rolling back `00001` deletes the `batches` and `email_jobs` tables **and all their data**. Run `goose status` first.
+- **Goose asks for no confirmation.** `goose reset`, `goose down-to ...` and `goose down` run immediately, and rolling back `00006` deletes the `email_batches`, `email_recipients`, `email_import_jobs` and `email_jobs` tables **and all their data**. Run `goose status` first.
 - **Use your development database only.** Keep the URL of any shared, staging or production database out of the `.env` that goose reads, so a mistyped command can only hit your own.
 - **A number that does not exist is not an error:** `goose up-to 99` simply applies everything. Check `goose status` for the real numbers.
 
@@ -256,7 +245,9 @@ Certificates are verified against the system trust store. To trust a private CA 
 
 **Settings overrides.** Selected env settings can be changed from the dashboard (`/api/v1/settings`). Saved values are stored in the `app_settings` table and override the environment; resetting a setting deletes the override. SMTP, sender, domain check, retry and upload size (`MAX_UPLOAD_MB`) settings apply instantly; worker count, pool size and poll interval are saved but reported with `restart_required` until the server restarts. `DATABASE_URL` and the HTTP address/timeouts are never editable.
 
-**Upload size.** `MAX_UPLOAD_MB` (default 10, allowed 1-50) is the largest spreadsheet both upload endpoints accept; larger files get `413 {"error":"file too large: the limit is N MB"}`. It can be changed on the Settings page without a restart; uploads already in progress keep the limit they started with. The ceiling exists because parsing holds the whole sheet in memory (roughly 13x the file size).
+**Upload size.** `MAX_UPLOAD_MB` (default 10, allowed 1-50) is the largest spreadsheet both upload endpoints accept; larger files get `413 {"error":"file too large: the limit is N MB"}`. It can be changed on the Settings page without a restart; uploads already in progress keep the limit they started with. The ceiling exists because the spreadsheet library holds the compressed file and its shared-text table in memory while reading. The upload itself is streamed to disk.
+
+**Uploaded files.** `UPLOAD_DIR` (default `data/uploads`) keeps each uploaded spreadsheet as `batch-<id>.xlsx`; the background import reads it from there, also after a restart, so use a folder that survives restarts. Files are kept permanently for now; an hourly clean-up removes only files no batch will read (an upload that died halfway).
 
 The SMTP password is stored encrypted (AES-256-GCM) with the key in `SETTINGS_ENCRYPTION_KEY` (`openssl rand -base64 32`). Without the key the password cannot be edited from the dashboard. Keep the key stable: if it changes, stored secrets are ignored and the environment value is used.
 

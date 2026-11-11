@@ -7,6 +7,8 @@ Numbers to compare before and after a performance change, measured with the
 |---|---|---|
 | [2026-11-08-baseline/](2026-11-08-baseline/results.md) | tag `bench/baseline-2026-11-08` | before the large-upload scaling work |
 | [2026-11-08-phase1/](2026-11-08-phase1/results.md) | branch `feat/upload-check-storage` | large-upload Phase 1: `POST /uploads`, paged problems, streaming parser |
+| [2026-11-09-comparison.md](2026-11-09-comparison.md) | - | **plain-words comparison of baseline, Phase 1 and the four-table overhaul, with what to look out for** |
+| [2026-11-09-four-tables/](2026-11-09-four-tables/results.md) | branch `refactor/database-schema-changes-with-system-overhaul` | four-table overhaul: background import (`POST /verify`, `POST /batches` + wait), Send + job generation, cursor-paged emails |
 
 Each folder holds `results.md` (the summary to read), `env.txt` (machine and
 settings), `go-bench.txt` (raw Go benchmark output, for benchstat) and the
@@ -16,12 +18,12 @@ server logs of each step.
 
 | Part | How | Numbers |
 |---|---|---|
-| Parser (`recipients.ParseExcelReader`) | Go benchmark, 6 runs | time, memory allocated (`B/op`), allocations, **peak heap MB** |
-| Check a file: `POST /uploads` (`POST /recipients/parse` in the baseline) | fresh API process, 3 runs | total time, response size, **server peak memory** (Linux `VmHWM`), server time |
-| `POST /batches` | fresh API process | total time, response size, server peak memory, parse / render / insert step times, database size |
+| Parser (`recipients.Scan`; `ParseExcelReader` before 2026-11-09) | Go benchmark, 6 runs | time, memory allocated (`B/op`), allocations, **peak heap MB** |
+| Check a file: `POST /verify` + wait until imported (`POST /uploads` in Phase 1, `POST /recipients/parse` in the baseline) | fresh API process, 3 runs | time until imported, **server peak memory** (Linux `VmHWM`), import time from the log |
+| `POST /batches` + wait + `POST /batches/{id}/send` | fresh API process | time until every email exists, generation time from the log, server peak memory, database size (`email_jobs` and `batches` + `/jobs` before 2026-11-09) |
 | Workers | count emails handled in 60 s | emails per second |
 | `POST /batches/{id}/cancel` | once, on the 1M batch | time |
-| Read endpoints (progress, list, jobs pages, search, stats) | 20 requests each on the 1M batch | median and p95 (the slow 5%) in ms |
+| Read endpoints (summary, list, emails pages, search, issues, sample, stats) | 20 requests each on the 1M batch | median and p95 (the slow 5%) in ms |
 
 Domain check is off (DNS answers change minute to minute, which would make the
 numbers jump for reasons unrelated to the code). Emails go to a throwaway
@@ -51,7 +53,7 @@ The Go benchmark on its own (skipped unless `BENCH_XLSX` is set, so normal
 
 ```bash
 BENCH_XLSX=$PWD/samples/12_million_mixed.xlsx \
-  go test ./internal/recipients -run '^$' -bench ParseExcelReader -benchtime 1x -count 6
+  go test ./internal/recipients -run '^$' -bench Scan -benchtime 1x -count 6
 ```
 
 - `-run '^$'` runs no normal tests, only benchmarks
