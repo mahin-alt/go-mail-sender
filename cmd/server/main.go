@@ -10,7 +10,10 @@
 //   3. store       - manages schema, batches, and the email job queue
 //      (+ saved settings that override the environment)
 //   4. smtp pool   - manages persistent, reusable SMTP connections
-//   5. worker pool - runs background Go workers that claim jobs using FOR UPDATE SKIP LOCKED
+//   5. workers     - background goroutines in this same process (decision 0013):
+//        import worker  reads uploaded spreadsheets into email_recipients
+//        generator      creates email jobs after the user clicks Send
+//        sending pool   claims jobs (FOR UPDATE SKIP LOCKED) and sends them
 //   6. http server - serves the REST API
 //   7. shutdown    - gracefully stops workers and connections on SIGINT / SIGTERM
 package main
@@ -31,6 +34,7 @@ import (
 	"sendmail/internal/api"
 	"sendmail/internal/config"
 	"sendmail/internal/domaincheck"
+	"sendmail/internal/importer"
 	"sendmail/internal/logging"
 	"sendmail/internal/mailer"
 	"sendmail/internal/migrations"
@@ -110,13 +114,14 @@ func main() {
 		fatal("settings encryption key", err)
 	}
 	var (
-		smtpPool *mailer.Pool
-		handler  *api.Handler
+		smtpPool     *mailer.Pool
+		handler      *api.Handler
+		importWorker *importer.Worker
 	)
 	settingsSvc := settings.New(st, cfg, encKey, func(c config.Config) {
 		smtpPool.Reconfigure(c)
 		st.SetMaxAttempts(c.MaxJobRetries)
-		handler.SetDomainCheckEnabled(c.DomainCheckEnabled)
+		importWorker.SetDomainCheckEnabled(c.DomainCheckEnabled)
 		handler.SetMaxUploadMB(c.MaxUploadMB)
 	})
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -137,27 +142,39 @@ func main() {
 	smtpPool = mailer.NewPool(cfg, cfg.SMTPPoolSize)
 	defer smtpPool.Close()
 
-	// 5. Initialize Background Worker Pool
-	workerPool := worker.NewPool(cfg.WorkerCount, cfg.JobPollInterval, st, smtpPool)
+	// 5. Background workers. They all run in this process for now; they only
+	// talk to each other through the database, so they could move to a separate
+	// worker process later without changes (ROADMAP: "Separate worker process").
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
+	// 5a. Sending pool: claims email jobs and sends them.
+	workerPool := worker.NewPool(cfg.WorkerCount, cfg.JobPollInterval, st, smtpPool)
 	workerPool.Start(workerCtx)
 
-	// Checked spreadsheets expire after 24 hours; delete them (and their rows) hourly.
-	go cleanupExpiredUploads(workerCtx, st, time.Hour)
+	// 5b. Job generator: after Send, creates the email jobs, then wakes the senders.
+	generator := worker.NewGenerator(st, time.Second, workerPool.Wake)
+	generator.Start(workerCtx)
 
-	// 6. Build HTTP Handler & Router
-	handler = api.NewHandler(smtpPool, st, workerPool)
-	// The checker is always installed so the Settings page can switch it on and
-	// off at runtime; DOMAIN_CHECK_ENABLED only decides the starting state.
-	handler.WithDomainChecker(domaincheck.NewChecker(net.DefaultResolver))
-	handler.SetDomainCheckEnabled(cfg.DomainCheckEnabled)
-	handler.SetMaxUploadMB(cfg.MaxUploadMB)
-	handler.WithSettings(settingsSvc)
+	// 5c. Import worker: reads uploaded spreadsheets from UPLOAD_DIR. The
+	// domain checker is always installed so the Settings page can switch it on
+	// and off at runtime; DOMAIN_CHECK_ENABLED only decides the starting state.
+	files := importer.Files{Dir: cfg.UploadDir}
+	importWorker = importer.NewWorker(st, files, domaincheck.NewChecker(net.DefaultResolver), time.Second)
+	importWorker.SetDomainCheckEnabled(cfg.DomainCheckEnabled)
+	importWorker.Start(workerCtx)
 	if cfg.DomainCheckEnabled {
 		slog.Info("recipient domain (DNS/MX) check enabled")
 	}
+
+	// 5d. Every hour, remove upload files no batch will read (an upload that
+	// died halfway, or a batch that was never created).
+	go cleanupOrphanFiles(workerCtx, files, st, time.Hour)
+
+	// 6. Build HTTP Handler & Router
+	handler = api.NewHandler(smtpPool, st, workerPool).WithImports(files, importWorker, generator)
+	handler.SetMaxUploadMB(cfg.MaxUploadMB)
+	handler.WithSettings(settingsSvc)
 	router := api.WithRequestLog(api.WithCORS(api.NewRouter(handler), cfg.CORSAllowedOrigins), logger)
 
 	srv := &http.Server{
@@ -198,8 +215,11 @@ func main() {
 		slog.Info("http server stopped")
 	}
 
-	// b. Stop workers and wait for any active in-flight email sends to complete
+	// b. Stop the workers. An import or job generation in progress keeps its
+	// checkpoint and continues on the next start; emails being sent finish.
 	workerCancel()
+	importWorker.Stop()
+	generator.Stop()
 	workerPool.Stop()
 
 	// c. Close SMTP connections
@@ -210,17 +230,17 @@ func main() {
 	slog.Info("graceful shutdown complete")
 }
 
-// cleanupExpiredUploads deletes expired uploads every interval until ctx ends.
-func cleanupExpiredUploads(ctx context.Context, st *store.Store, interval time.Duration) {
+// cleanupOrphanFiles removes orphan upload files every interval until ctx ends.
+func cleanupOrphanFiles(ctx context.Context, files importer.Files, st *store.Store, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		n, err := st.DeleteExpiredUploads(ctx)
+		n, err := files.CleanupOrphans(ctx, st, time.Hour)
 		switch {
 		case err != nil && ctx.Err() == nil:
-			slog.Error("delete expired uploads failed", "err", err)
+			slog.Error("clean up orphan uploads failed", "err", err)
 		case n > 0:
-			slog.Info("expired uploads deleted", "count", n)
+			slog.Info("orphan upload files removed", "count", n)
 		}
 		select {
 		case <-ctx.Done():

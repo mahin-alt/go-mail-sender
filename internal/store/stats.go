@@ -56,7 +56,7 @@ type Stats struct {
 	Today          TodayStats       `json:"today"`
 	Queue          QueueStats       `json:"queue"`
 	FailedTotal    int              `json:"failed_total"`   // failed jobs still unresolved, across all batches
-	ActiveBatches  int              `json:"active_batches"` // batches that are pending or processing
+	ActiveBatches  int              `json:"active_batches"` // batches importing, generating, queued or sending
 	Daily          []DayStat        `json:"daily"`
 	NeedsAttention []AttentionBatch `json:"needs_attention"`
 }
@@ -97,7 +97,7 @@ func (s *Store) GetStats(ctx context.Context, opt StatsOptions) (*Stats, error) 
 		  (SELECT COUNT(*) FROM email_jobs WHERE status = 'pending' AND attempts > 0),
 		  (SELECT COUNT(*) FROM email_jobs WHERE status = 'processing'),
 		  (SELECT COUNT(*) FROM email_jobs WHERE status = 'failed'),
-		  (SELECT COUNT(*) FROM batches    WHERE status IN ('pending', 'processing'))
+		  (SELECT COUNT(*) FROM email_batches WHERE status IN ('importing', 'generating_jobs', 'queued', 'sending'))
 	`, todayStart).Scan(
 		&st.Today.Sent, &st.Today.Failed,
 		&st.Queue.Pending, &st.Queue.Retrying, &st.Queue.Processing,
@@ -151,20 +151,13 @@ func (s *Store) GetStats(ctx context.Context, opt StatsOptions) (*Stats, error) 
 
 	// 3. Needs attention: batches with unresolved failed jobs, or (recent
 	// batches only) a high share of invalid rows. Newest first, at most 10.
+	// The counters on email_batches make this a read of the small batch table.
 	rows, err := s.db.QueryContext(ctx, `
-		WITH failed AS (
-		  SELECT batch_id, COUNT(*) AS n FROM email_jobs WHERE status = 'failed' GROUP BY batch_id
-		)
-		SELECT b.id, b.filename, b.status, b.total_jobs, COALESCE(f.n, 0), COALESCE(inv.n, 0), b.created_at
-		FROM batches b
-		LEFT JOIN failed f ON f.batch_id = b.id
-		LEFT JOIN LATERAL (
-		  SELECT COUNT(*) AS n FROM email_jobs j
-		  WHERE j.batch_id = b.id AND j.status = 'invalid' AND b.created_at >= $1
-		) inv ON TRUE
-		WHERE COALESCE(f.n, 0) > 0
-		   OR (COALESCE(inv.n, 0) > 0 AND COALESCE(inv.n, 0) * 5 >= b.total_jobs)
-		ORDER BY b.created_at DESC, b.id DESC
+		SELECT id, original_filename, status, total_rows, failed_count, invalid_count, created_at
+		FROM email_batches
+		WHERE failed_count > 0
+		   OR (created_at >= $1 AND invalid_count > 0 AND invalid_count * 5 >= total_rows)
+		ORDER BY created_at DESC, id DESC
 		LIMIT 10
 	`, time.Now().Add(-attentionWindow))
 	if err != nil {

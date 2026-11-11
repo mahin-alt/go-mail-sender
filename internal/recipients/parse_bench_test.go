@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-// BenchmarkParseExcelReader measures parsing one big spreadsheet, the same way
-// the API does (ParseExcelReader on the uploaded file).
+// BenchmarkScan measures reading one big spreadsheet row by row, the same way
+// the import worker does (Scan over the saved file, nothing kept per row).
 //
 // It is skipped unless BENCH_XLSX names a file, so `go test ./...` stays fast:
 //
 //	BENCH_XLSX=$PWD/samples/12_million_mixed.xlsx \
-//	  go test ./internal/recipients -run '^$' -bench ParseExcelReader -benchtime 1x -count 6
+//	  go test ./internal/recipients -run '^$' -bench Scan -benchtime 1x -count 6
 //
 // Besides time (ns/op), memory allocated (B/op) and allocations (allocs/op)
 // from -benchmem, it reports:
 //   - peak-heap-MB: the most heap memory in use at any moment during one parse,
 //     above what was in use before it started. This is what decides whether the
 //     server runs out of memory, so it is the main number to compare.
-//   - valid-rows / problem-rows: a sanity check that both versions parsed the
-//     same file the same way.
-func BenchmarkParseExcelReader(b *testing.B) {
+//   - valid-rows / problem-rows: a sanity check that runs read the file the
+//     same way.
+func BenchmarkScan(b *testing.B) {
 	path := os.Getenv("BENCH_XLSX")
 	if path == "" {
 		b.Skip("set BENCH_XLSX to a .xlsx file to run this benchmark")
@@ -44,7 +44,15 @@ func BenchmarkParseExcelReader(b *testing.B) {
 		stop := watchPeakHeap()
 		b.StartTimer()
 
-		v, p, err := ParseExcelReader(f)
+		v, p := 0, 0
+		err = Scan(f, func(r Row) error {
+			if r.Kind == KindOK {
+				v++
+			} else {
+				p++
+			}
+			return nil
+		})
 
 		b.StopTimer()
 		peak := stop()
@@ -52,7 +60,7 @@ func BenchmarkParseExcelReader(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		valid, problems = len(v), len(p)
+		valid, problems = v, p
 		peakMB = max(peakMB, float64(peak)/(1<<20))
 		b.StartTimer()
 	}

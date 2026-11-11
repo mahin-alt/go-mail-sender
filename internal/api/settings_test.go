@@ -4,14 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"sendmail/internal/config"
-	"sendmail/internal/domaincheck"
 	"sendmail/internal/settings"
-	"sendmail/internal/store"
 )
 
 // settingsRouter builds a router whose settings service has no database behind
@@ -151,45 +148,6 @@ func TestTestSMTP_ValidationAndConnectionFailure(t *testing.T) {
 	rec := do(r, "POST", "/api/v1/settings/smtp/test", `{"to":"a@b.co","host":"127.0.0.1","port":"1"}`)
 	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "test email failed") {
 		t.Fatalf("status = %d body = %s, want 502 with reason", rec.Code, rec.Body.String())
-	}
-}
-
-// The runtime switch (DOMAIN_CHECK_ENABLED from Settings) must really change
-// parsing behaviour: on = dead domains rejected, off = everything kept.
-func TestDomainCheckRuntimeSwitch(t *testing.T) {
-	sample := filepath.Join("..", "..", "samples", "11_domain_check.xlsx")
-	h := newUploadHandler().WithDomainChecker(fakeDomains{
-		"example.com": {Status: domaincheck.Invalid, Reason: "domain example.com does not accept mail"},
-	})
-
-	problems := func() int {
-		t.Helper()
-		rec := postFileTo(h, "/api/v1/uploads", sample, "11_domain_check.xlsx", "file")
-		var resp store.Upload
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Fatal(err)
-		}
-		return resp.ProblemCount
-	}
-
-	if problems() == 0 {
-		t.Fatal("checker installed: dead domains should be rejected")
-	}
-	h.SetDomainCheckEnabled(false)
-	if n := problems(); n != 0 {
-		t.Fatalf("switched off: nothing should be rejected, got %d problems", n)
-	}
-	h.SetDomainCheckEnabled(true)
-	if problems() == 0 {
-		t.Fatal("switched back on: dead domains should be rejected again")
-	}
-
-	// Without a checker the switch is a harmless no-op.
-	bare := newUploadHandler()
-	bare.SetDomainCheckEnabled(true)
-	rec := postFileTo(bare, "/api/v1/uploads", sample, "11_domain_check.xlsx", "file")
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d", rec.Code)
 	}
 }
 

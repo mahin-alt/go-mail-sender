@@ -9,10 +9,10 @@ import (
 // wipe removes all batches (and their jobs, by cascade) so stats start from zero.
 func wipe(t *testing.T, st *Store) {
 	t.Helper()
-	if _, err := st.db.Exec(`DELETE FROM batches`); err != nil {
+	if _, err := st.db.Exec(`DELETE FROM email_batches`); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { st.db.Exec(`DELETE FROM batches`) })
+	t.Cleanup(func() { st.db.Exec(`DELETE FROM email_batches`) })
 }
 
 func setJob(t *testing.T, st *Store, id int64, sentAt, updatedAt *time.Time, attempts int) {
@@ -111,7 +111,7 @@ func TestGetStats_KnownData(t *testing.T) {
 
 	// Batch E: all invalid but created 60 days ago -> outside the attention window.
 	eID, _ := seedBatch(t, st, "invalid", "invalid", "invalid", "invalid", "invalid")
-	if _, err := st.db.Exec(`UPDATE batches SET created_at = $2 WHERE id = $1`, eID, day(-60)); err != nil {
+	if _, err := st.db.Exec(`UPDATE email_batches SET created_at = $2 WHERE id = $1`, eID, day(-60)); err != nil {
 		t.Fatal(err)
 	}
 

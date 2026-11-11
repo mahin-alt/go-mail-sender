@@ -9,64 +9,69 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
-	"mime/multipart"
 	"net/http"
 	"net/mail"
-	"net/url"
-	"slices"
-	"strconv"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"sendmail/internal/config"
-	"sendmail/internal/domaincheck"
+	"sendmail/internal/importer"
 	"sendmail/internal/mailer"
-	"sendmail/internal/recipients"
 	"sendmail/internal/settings"
 	"sendmail/internal/store"
-	"sendmail/internal/template"
-	"sendmail/internal/worker"
 )
 
-// Limits on request bodies to prevent resource exhaustion. The upload limit
-// itself is a runtime setting (MAX_UPLOAD_MB), see SetMaxUploadMB.
-const (
-	maxBodyBytes = 1 << 20 // 1 MB for JSON payloads
-
-	// formOverheadBytes is room for the multipart boundaries and the small
-	// text fields (subject, body) that travel with the file, so a file exactly
-	// at the limit is still accepted.
-	formOverheadBytes = 1 << 20
-)
+// Waker is a background worker the API can nudge after creating work for it
+// (an upload to import, a batch to generate, emails to send), so it starts
+// now instead of at its next poll.
+type Waker interface{ Wake() }
 
 // Handler holds the dependencies our HTTP handlers need.
 //
 // Concept: dependency injection. Handlers receive dependencies via struct fields
 // rather than global variables. This allows tests to pass fakes/mocks easily.
 type Handler struct {
-	mailer  mailer.Mailer
-	store   *store.Store
-	worker  *worker.Pool
-	domains DomainChecker // nil = no checker available
+	mailer mailer.Mailer
+	store  *store.Store
 
-	// domainsOn is the runtime on/off switch for the domain check, flipped from
-	// the Settings page. Atomic because requests read it while Settings writes it.
-	domainsOn atomic.Bool
+	// Background workers to wake; nil in tests that do not need them.
+	sender    Waker
+	importer  Waker
+	generator Waker
+
+	files importer.Files // where uploaded spreadsheets are saved
 
 	// maxUploadMB is the largest accepted spreadsheet, changed from the
 	// Settings page while requests are reading it, hence atomic.
 	maxUploadMB atomic.Int64
 
 	settings *settings.Service // nil = settings endpoints disabled
+}
 
-	// uploads keeps checked spreadsheets (the database store; a fake in tests).
-	uploads UploadStore
+// NewHandler builds a Handler. store and sender can be nil in isolated tests
+// that only exercise validation.
+func NewHandler(m mailer.Mailer, st *store.Store, sender Waker) *Handler {
+	h := &Handler{
+		mailer: m,
+		store:  st,
+		sender: sender,
+		files:  importer.Files{Dir: filepath.Join(os.TempDir(), "go-mail-sender-uploads")},
+	}
+	h.maxUploadMB.Store(config.DefaultMaxUploadMB)
+	return h
+}
+
+// WithImports sets where uploads are saved and the import and job-generation
+// workers to wake, and returns h for chaining.
+func (h *Handler) WithImports(files importer.Files, imports, generator Waker) *Handler {
+	h.files, h.importer, h.generator = files, imports, generator
+	return h
 }
 
 // SetMaxUploadMB changes the upload size limit at runtime. Uploads already in
@@ -77,134 +82,16 @@ func (h *Handler) SetMaxUploadMB(mb int) {
 	}
 }
 
-// readUpload reads the multipart form and returns the .xlsx in field "file".
-// The size limit is read once, so a settings change mid-upload does not affect
-// it. On any problem it writes the error response and returns ok=false.
-func (h *Handler) readUpload(w http.ResponseWriter, r *http.Request) (multipart.File, *multipart.FileHeader, bool) {
-	limitMB := h.maxUploadMB.Load()
-	limit := limitMB << 20
-	tooLarge := fmt.Sprintf("file too large: the limit is %d MB", limitMB)
-
-	r.Body = http.MaxBytesReader(w, r.Body, limit+formOverheadBytes)
-	if err := r.ParseMultipartForm(5 << 20); err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			writeError(w, http.StatusRequestEntityTooLarge, tooLarge)
-			return nil, nil, false
-		}
-		writeError(w, http.StatusBadRequest, "invalid multipart form: "+err.Error())
-		return nil, nil, false
-	}
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, `form field "file" is required`)
-		return nil, nil, false
-	}
-	if header.Size > limit {
-		file.Close()
-		writeError(w, http.StatusRequestEntityTooLarge, tooLarge)
-		return nil, nil, false
-	}
-	if !strings.HasSuffix(strings.ToLower(header.Filename), ".xlsx") {
-		file.Close()
-		writeError(w, http.StatusBadRequest, "only .xlsx files are supported")
-		return nil, nil, false
-	}
-	return file, header, true
-}
-
-// DomainChecker reports whether an email domain can receive mail.
-// *domaincheck.Checker satisfies it; tests pass a fake.
-type DomainChecker interface {
-	Check(ctx context.Context, domain string) domaincheck.Result
-}
-
-// WithDomainChecker enables the recipient domain check and returns h for chaining.
-func (h *Handler) WithDomainChecker(c DomainChecker) *Handler {
-	h.domains = c
-	h.domainsOn.Store(c != nil)
-	return h
-}
-
-// SetDomainCheckEnabled switches the domain check on or off at runtime. It has
-// no effect until a checker was provided with WithDomainChecker.
-func (h *Handler) SetDomainCheckEnabled(on bool) {
-	h.domainsOn.Store(on)
-}
-
 // WithSettings enables the /api/v1/settings endpoints.
 func (h *Handler) WithSettings(s *settings.Service) *Handler {
 	h.settings = s
 	return h
 }
 
-// verifyDomains runs the domain check over parsed recipients.
-//   - ok:         recipients to keep (domain valid, or could not be verified)
-//   - rejected:   rows whose domain definitely cannot receive mail
-//   - unverified: kept rows whose lookup failed (e.g. DNS timeout), reported so
-//     "confirmed" and "could not check" are distinguishable
-//
-// A DNS failure never rejects a row: wrongly dropping a real customer costs
-// more than a bounce. With no checker configured everything is kept as-is.
-func (h *Handler) verifyDomains(ctx context.Context, recs []recipients.Recipient) (ok []recipients.Recipient, rejected, unverified []recipients.RowError) {
-	if h.domains == nil || !h.domainsOn.Load() {
-		return recs, nil, nil
+func wake(w Waker) {
+	if w != nil {
+		w.Wake()
 	}
-
-	// Look each domain up once per request (the rows are checked one after
-	// another; a shared cache and concurrency come in a later phase).
-	results := make(map[string]domaincheck.Result)
-
-	ok = make([]recipients.Recipient, 0, len(recs))
-	for _, rec := range recs {
-		domain := rec.Email[strings.LastIndex(rec.Email, "@")+1:]
-		res, seen := results[domain]
-		if !seen {
-			res = h.domains.Check(ctx, domain)
-			results[domain] = res
-		}
-
-		switch res.Status {
-		case domaincheck.Invalid:
-			rejected = append(rejected, recipients.RowError{Row: rec.Row, Name: rec.Name, Email: rec.Email, Reason: res.Reason})
-		case domaincheck.Unknown:
-			unverified = append(unverified, recipients.RowError{Row: rec.Row, Name: rec.Name, Email: rec.Email, Reason: res.Reason})
-			ok = append(ok, rec)
-		default:
-			ok = append(ok, rec)
-		}
-	}
-
-	if len(unverified) > 0 {
-		slog.Warn("domain check could not verify some recipients; they are kept", "count", len(unverified))
-	}
-	return ok, rejected, unverified
-}
-
-// mergeProblems appends rejected rows to problems, keeping spreadsheet row order.
-func mergeProblems(problems, rejected []recipients.RowError) []recipients.RowError {
-	if len(rejected) == 0 {
-		return problems
-	}
-	problems = append(problems, rejected...)
-	slices.SortStableFunc(problems, func(a, b recipients.RowError) int { return a.Row - b.Row })
-	return problems
-}
-
-// NewHandler builds a Handler with all required dependencies.
-// store and worker can be nil in isolated tests that only test synchronous endpoints.
-func NewHandler(m mailer.Mailer, st *store.Store, wp *worker.Pool) *Handler {
-	h := &Handler{
-		mailer: m,
-		store:  st,
-		worker: wp,
-	}
-	if st != nil { // a nil *store.Store inside the interface would not compare equal to nil
-		h.uploads = st
-	}
-	h.maxUploadMB.Store(config.DefaultMaxUploadMB)
-	return h
 }
 
 // sendEmailRequest is the JSON shape clients send to POST /api/v1/emails.
@@ -251,235 +138,6 @@ func (h *Handler) SendEmail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "email sent"})
 }
 
-// createBatchResponse is returned by POST /api/v1/batches.
-type createBatchResponse struct {
-	BatchID      int64  `json:"batch_id"`
-	Filename     string `json:"filename"`
-	TotalRows    int    `json:"total_rows"`
-	ValidCount   int    `json:"valid_count"`
-	InvalidCount int    `json:"invalid_count"`
-	Status       string `json:"status"`
-	// UnverifiedCount counts valid rows whose domain lookup failed (e.g. DNS
-	// timeout). They are still queued. The rows themselves are not returned:
-	// the batch's job list shows them (invalid rows with their reason).
-	UnverifiedCount int    `json:"unverified_count"`
-	Message         string `json:"message"`
-}
-
-// CreateBatch handles POST /api/v1/batches:
-// Accepts an uploaded Excel file + optional subject & body templates,
-// creates a Batch in PostgreSQL, renders personalized email bodies for each recipient,
-// bulk-inserts the jobs, and signals background workers to process them.
-func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusInternalServerError, "database store is not configured")
-		return
-	}
-
-	start := time.Now()
-	file, header, ok := h.readUpload(w, r)
-	if !ok {
-		return
-	}
-	defer file.Close()
-
-	// Read optional template overrides from the form.
-	// Defaults provide an out-of-the-box personalized greeting using {{.Name}}.
-	subjectTmpl := strings.TrimSpace(r.FormValue("subject"))
-	if subjectTmpl == "" {
-		subjectTmpl = "Hello {{.Name}}"
-	}
-
-	bodyTmpl := strings.TrimSpace(r.FormValue("body"))
-	if bodyTmpl == "" {
-		bodyTmpl = "Hi {{.Name}},\n\nWelcome to our platform!"
-	}
-
-	// Validate template syntax before creating any database records
-	if err := template.Validate(subjectTmpl); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid subject template: "+err.Error())
-		return
-	}
-	if err := template.Validate(bodyTmpl); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body template: "+err.Error())
-		return
-	}
-
-	// Parse Excel recipients
-	t := time.Now()
-	validRecipients, problems, err := recipients.ParseExcelReader(file)
-	parseTime := time.Since(t)
-	if err != nil {
-		if errors.Is(err, recipients.ErrMissingColumns) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to parse excel file: %v", err))
-		return
-	}
-
-	if len(validRecipients) == 0 && len(problems) == 0 {
-		writeError(w, http.StatusBadRequest, "no recipient rows found in the uploaded excel file")
-		return
-	}
-
-	// Reject rows whose domain cannot receive mail; they are recorded below as
-	// 'invalid' jobs together with the syntax problems.
-	t = time.Now()
-	validRecipients, rejected, unverified := h.verifyDomains(r.Context(), validRecipients)
-	domainTime := time.Since(t)
-	problems = mergeProblems(problems, rejected)
-
-	t = time.Now() // rendering and building the job rows
-
-	jobs := make([]store.Job, 0, len(validRecipients)+len(problems))
-
-	// 1. Build jobs for valid recipients (status = 'pending')
-	for _, rec := range validRecipients {
-		data := template.RecipientData{
-			Name:  rec.Name,
-			Email: rec.Email,
-		}
-
-		renderedSubject, err := template.Render(subjectTmpl, data)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("render subject for %s: %v", rec.Email, err))
-			return
-		}
-
-		renderedBody, err := template.Render(bodyTmpl, data)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("render body for %s: %v", rec.Email, err))
-			return
-		}
-
-		jobs = append(jobs, store.Job{
-			RecipientName:  rec.Name,
-			RecipientEmail: rec.Email,
-			Subject:        renderedSubject,
-			Body:           renderedBody,
-			Status:         "pending",
-		})
-	}
-
-	// 2. Build jobs for invalid recipients (status = 'invalid') so they are tracked
-	// in the database without being picked up by background workers.
-	for _, prob := range problems {
-		reason := prob.Reason
-		jobs = append(jobs, store.Job{
-			RecipientName:  prob.Name,
-			RecipientEmail: prob.Email,
-			Subject:        "",
-			Body:           "",
-			Status:         "invalid",
-			LastError:      &reason,
-		})
-	}
-
-	// Save batch and all rows (valid + invalid) atomically inside a database transaction
-	renderTime := time.Since(t)
-
-	t = time.Now()
-	batchID, err := h.store.CreateBatchWithJobs(r.Context(), header.Filename, subjectTmpl, bodyTmpl, jobs)
-	insertTime := time.Since(t)
-	if err != nil {
-		slog.Error("create batch failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to create batch in database")
-		return
-	}
-	slog.Info("batch created", "batch_id", batchID, "filename", header.Filename,
-		"pending", len(validRecipients), "invalid", len(problems), "unverified", len(unverified),
-		"parse", ms(parseTime), "domain_check", ms(domainTime), "render", ms(renderTime),
-		"insert", ms(insertTime), "total", ms(time.Since(start)))
-
-	// Wake up idle workers only if there are pending jobs to send
-	if len(validRecipients) > 0 && h.worker != nil {
-		h.worker.Wake()
-	}
-
-	batchStatus := "pending"
-	if len(validRecipients) == 0 {
-		batchStatus = "completed"
-	}
-
-	// 202 Accepted: request is accepted
-	writeJSON(w, http.StatusAccepted, createBatchResponse{
-		BatchID:         batchID,
-		Filename:        header.Filename,
-		TotalRows:       len(jobs),
-		ValidCount:      len(validRecipients),
-		InvalidCount:    len(problems),
-		Status:          batchStatus,
-		UnverifiedCount: len(unverified),
-		Message:         "batch accepted; valid emails queued for delivery and invalid rows recorded",
-	})
-}
-
-// GetBatch handles GET /api/v1/batches/{id}:
-// Returns progress and status metrics for a batch.
-func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusInternalServerError, "database store is not configured")
-		return
-	}
-
-	idStr := r.PathValue("id")
-	batchID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || batchID <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid batch id")
-		return
-	}
-
-	progress, err := h.store.GetBatchProgress(r.Context(), batchID)
-	if err != nil {
-		if errors.Is(err, store.ErrBatchNotFound) {
-			writeError(w, http.StatusNotFound, "batch not found")
-			return
-		}
-		slog.Error("get batch progress failed", "batch_id", batchID, "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to get batch progress")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, progress)
-}
-
-// GetBatchJobs handles GET /api/v1/batches/{id}/jobs: one page of a batch's
-// jobs, filtered by ?status= and ?q= (email or name), paged with ?limit=
-// (default 20, max 100) and ?offset=. Always paged: a batch can hold a
-// million jobs, far too many for one response.
-func (h *Handler) GetBatchJobs(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusInternalServerError, "database store is not configured")
-		return
-	}
-
-	idStr := r.PathValue("id")
-	batchID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil || batchID <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid batch id")
-		return
-	}
-
-	q := r.URL.Query()
-	limit, offset, ok := parsePaging(w, q)
-	if !ok {
-		return
-	}
-	jobs, total, err := h.store.ListBatchJobs(r.Context(), batchID, store.JobListFilter{
-		Status: strings.TrimSpace(q.Get("status")),
-		Search: strings.TrimSpace(q.Get("q")),
-		Limit:  limit,
-		Offset: offset,
-	})
-	if err != nil {
-		slog.Error("list batch jobs failed", "batch_id", batchID, "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch batch jobs")
-		return
-	}
-	writeJSON(w, http.StatusOK, jobListResponse{Items: jobs, Total: total, Limit: limit, Offset: offset})
-}
-
 func validateEmailReq(req sendEmailRequest) string {
 	if strings.TrimSpace(req.To) == "" {
 		return "\"to\" is required"
@@ -512,174 +170,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
-}
-
-// batchListResponse is the paged envelope returned by ListBatches.
-type batchListResponse struct {
-	Items  []store.BatchSummary `json:"items"`
-	Total  int                  `json:"total"`
-	Limit  int                  `json:"limit"`
-	Offset int                  `json:"offset"`
-}
-
-// Paging bounds for list endpoints.
-const (
-	defaultPageSize = 20
-	maxPageSize     = 100
-)
-
-// ListBatches handles GET /api/v1/batches:
-// Lists batches newest-first with job counts. Query params: status, q
-// (filename search), limit (default 20, max 100) and offset.
-func (h *Handler) ListBatches(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusInternalServerError, "database store is not configured")
-		return
-	}
-
-	q := r.URL.Query()
-	limit, offset, ok := parsePaging(w, q)
-	if !ok {
-		return
-	}
-
-	items, total, err := h.store.ListBatches(r.Context(), store.BatchListFilter{
-		Status: strings.TrimSpace(q.Get("status")),
-		Search: strings.TrimSpace(q.Get("q")),
-		Limit:  limit,
-		Offset: offset,
-	})
-	if err != nil {
-		slog.Error("list batches failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to list batches")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, batchListResponse{Items: items, Total: total, Limit: limit, Offset: offset})
-}
-
-// jobListResponse is the paged envelope returned by GetBatchJobs.
-type jobListResponse struct {
-	Items  []store.Job `json:"items"`
-	Total  int         `json:"total"`
-	Limit  int         `json:"limit"`
-	Offset int         `json:"offset"`
-}
-
-// parsePaging reads ?limit= and ?offset= with defaults and bounds. On bad input
-// it writes a 400 and returns ok=false, so callers just return.
-func parsePaging(w http.ResponseWriter, q url.Values) (limit, offset int, ok bool) {
-	limit = defaultPageSize
-	if v := q.Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 {
-			writeError(w, http.StatusBadRequest, "invalid limit")
-			return 0, 0, false
-		}
-		limit = min(n, maxPageSize)
-	}
-	if v := q.Get("offset"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "invalid offset")
-			return 0, 0, false
-		}
-		offset = n
-	}
-	return limit, offset, true
-}
-
-type retryResponse struct {
-	Retried int `json:"retried"`
-}
-
-// RetryBatch handles POST /api/v1/batches/{id}/retry:
-// Requeues every failed job in the batch with a fresh set of attempts.
-func (h *Handler) RetryBatch(w http.ResponseWriter, r *http.Request) {
-	h.retry(w, r, false)
-}
-
-// RetryJob handles POST /api/v1/jobs/{id}/retry:
-// Requeues a single failed job.
-func (h *Handler) RetryJob(w http.ResponseWriter, r *http.Request) {
-	h.retry(w, r, true)
-}
-
-func (h *Handler) retry(w http.ResponseWriter, r *http.Request, singleJob bool) {
-	if h.store == nil {
-		writeError(w, http.StatusInternalServerError, "database store is not configured")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-
-	var n int
-	if singleJob {
-		n, err = h.store.RetryFailedJob(r.Context(), id)
-	} else {
-		n, err = h.store.RetryFailedJobs(r.Context(), id, nil)
-	}
-	if err != nil {
-		if errors.Is(err, store.ErrBatchNotFound) {
-			writeError(w, http.StatusNotFound, "batch not found")
-			return
-		}
-		if errors.Is(err, store.ErrJobNotRetryable) {
-			writeError(w, http.StatusNotFound, "no failed job with that id")
-			return
-		}
-		if errors.Is(err, store.ErrBatchNotActive) {
-			writeError(w, http.StatusConflict, "the bulk email was cancelled; its emails cannot be retried")
-			return
-		}
-		slog.Error("retry failed", "id", id, "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to retry")
-		return
-	}
-
-	if n > 0 && h.worker != nil {
-		h.worker.Wake()
-	}
-	writeJSON(w, http.StatusOK, retryResponse{Retried: n})
-}
-
-type cancelResponse struct {
-	Cancelled int `json:"cancelled"`
-}
-
-// CancelBatch handles POST /api/v1/batches/{id}/cancel:
-// stops a batch that is still sending. Unsent emails become 'cancelled' and
-// are never sent or retried; an email being sent right now finishes.
-func (h *Handler) CancelBatch(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusInternalServerError, "database store is not configured")
-		return
-	}
-
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusBadRequest, "invalid batch id")
-		return
-	}
-
-	n, err := h.store.CancelBatch(r.Context(), id)
-	switch {
-	case errors.Is(err, store.ErrBatchNotFound):
-		writeError(w, http.StatusNotFound, "batch not found")
-		return
-	case errors.Is(err, store.ErrBatchNotActive):
-		writeError(w, http.StatusConflict, "the bulk email has already finished or was cancelled")
-		return
-	case err != nil:
-		slog.Error("cancel batch failed", "batch_id", id, "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to cancel")
-		return
-	}
-
-	slog.Info("batch cancelled", "batch_id", id, "cancelled", n)
-	writeJSON(w, http.StatusOK, cancelResponse{Cancelled: n})
 }

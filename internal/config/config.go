@@ -72,6 +72,11 @@ type Config struct {
 	// Parsing holds the whole sheet in memory, so it is capped at MaxUploadMBLimit.
 	MaxUploadMB int
 
+	// UploadDir is the folder where uploaded spreadsheets are saved
+	// (batch-<id>.xlsx). The import worker reads them from there, also after
+	// a restart, so it must survive restarts (not /tmp on some systems).
+	UploadDir string
+
 	// DomainCheckEnabled turns on the DNS/MX check of recipient domains when
 	// recipients are parsed. Rows whose domain cannot receive mail are rejected.
 	DomainCheckEnabled bool
@@ -165,6 +170,7 @@ func Load() (Config, error) {
 		JobPollInterval: getEnvDuration("JOB_POLL_INTERVAL", 500*time.Millisecond),
 		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
 		MaxUploadMB:     maxUploadMB,
+		UploadDir:       getEnv("UPLOAD_DIR", "data/uploads"),
 
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
 

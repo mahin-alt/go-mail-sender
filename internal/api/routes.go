@@ -17,21 +17,23 @@ func NewRouter(h *Handler) http.Handler {
 	// Single email delivery (synchronous)
 	mux.HandleFunc("POST /api/v1/emails", h.SendEmail)
 
-	// Checked spreadsheets: upload a .xlsx once, get its totals, then page
-	// through its problems and fetch a few rows for the email preview.
-	mux.HandleFunc("POST /api/v1/uploads", h.CreateUpload)
-	mux.HandleFunc("GET /api/v1/uploads/{id}", h.GetUpload)
-	mux.HandleFunc("GET /api/v1/uploads/{id}/problems", h.ListUploadProblems)
-	mux.HandleFunc("GET /api/v1/uploads/{id}/sample", h.GetUploadSample)
+	// Verify Emails: upload a .xlsx to check it (202, imported in the
+	// background), poll its progress, page through the rows that will not be sent.
+	mux.HandleFunc("POST /api/v1/verify", h.CreateVerification)
+	mux.HandleFunc("GET /api/v1/verify/{id}", h.GetBatch)
+	mux.HandleFunc("GET /api/v1/verify/{id}/issues", h.ListIssues)
 
-	// Background batch job routes: upload Excel + template, queue jobs in PostgreSQL,
-	// and query asynchronous progress.
+	// Bulk Emails: upload, review, explicitly send, follow delivery, cancel, retry.
+	// A verified batch is sent with the same /batches/{id}/send.
 	mux.HandleFunc("POST /api/v1/batches", h.CreateBatch)
 	mux.HandleFunc("GET /api/v1/batches", h.ListBatches)
 	mux.HandleFunc("GET /api/v1/batches/{id}", h.GetBatch)
-	mux.HandleFunc("GET /api/v1/batches/{id}/jobs", h.GetBatchJobs)
-	mux.HandleFunc("POST /api/v1/batches/{id}/retry", h.RetryBatch)
+	mux.HandleFunc("GET /api/v1/batches/{id}/issues", h.ListIssues)
+	mux.HandleFunc("GET /api/v1/batches/{id}/sample", h.GetSample)
+	mux.HandleFunc("POST /api/v1/batches/{id}/send", h.SendBatch)
+	mux.HandleFunc("GET /api/v1/batches/{id}/emails", h.ListEmails)
 	mux.HandleFunc("POST /api/v1/batches/{id}/cancel", h.CancelBatch)
+	mux.HandleFunc("POST /api/v1/batches/{id}/retry", h.RetryBatch)
 	mux.HandleFunc("POST /api/v1/jobs/{id}/retry", h.RetryJob)
 
 	// Dashboard Overview numbers.

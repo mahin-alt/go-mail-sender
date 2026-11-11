@@ -18,34 +18,10 @@ import (
 	"fmt"
 	"io"
 	"net/mail"
-	"os"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
-
-// Recipient is one person we will send an email to.
-type Recipient struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Row   int    `json:"row"` // spreadsheet row (header is row 1), so later checks can point back at it
-}
-
-// RowError describes one row we could not use. It is DATA, not a failure of
-// the whole run: a bad row should not stop the good rows from being sent.
-type RowError struct {
-	Row    int    `json:"row"`             // the row number as shown in Excel (header is row 1)
-	Name   string `json:"name,omitempty"`  // raw name from spreadsheet
-	Email  string `json:"email,omitempty"` // raw email from spreadsheet
-	Reason string `json:"reason"`          // human readable explanation
-}
-
-// Error makes RowError satisfy Go's built-in `error` interface (any type with
-// an `Error() string` method is an error). We don't strictly need that here,
-// but it lets callers print a RowError or wrap it like any other error.
-func (e RowError) Error() string {
-	return fmt.Sprintf("row %d: %s", e.Row, e.Reason)
-}
 
 // ErrMissingColumns is a "sentinel error": a package-level value callers can
 // test for with errors.Is. It means the file is the wrong shape entirely
@@ -53,8 +29,9 @@ func (e RowError) Error() string {
 var ErrMissingColumns = errors.New(`sheet must have "name" and "email" columns in its header row`)
 
 // Kind is the result of checking one row. KindOK and KindUnverified rows are
-// sent; every other kind is skipped. The values are stored in the database
-// (upload_rows.kind) and returned by the API, so do not rename them.
+// sent; every other kind is skipped. The skipped kinds are stored as
+// email_recipients.validation_reason and returned by the API, so do not
+// rename them. Duplicate emails are NOT flagged: each row gets its email.
 type Kind string
 
 const (
@@ -63,12 +40,16 @@ const (
 	KindEmptyEmail   Kind = "empty_email"   // name present, email empty
 	KindEmptyName    Kind = "empty_name"    // email present, name empty
 	KindInvalidEmail Kind = "invalid_email" // not a plain email address
-	KindDuplicate    Kind = "duplicate"     // same email as an earlier row
 	KindBadDomain    Kind = "bad_domain"    // the domain cannot receive mail
 )
 
-// SkippedKinds lists every kind that is not sent, in the order the UI shows them.
-var SkippedKinds = []Kind{KindEmptyEmail, KindEmptyName, KindInvalidEmail, KindDuplicate, KindBadDomain}
+// Length caps. Excel cells can hold 32,767 characters; nothing that long is a
+// real name or address, so longer values are cut before they are stored.
+const (
+	maxNameLen  = 255
+	maxEmailLen = 254 // the longest address SMTP allows
+	maxStoreLen = 500 // an over-long (invalid) email is still shown, cut to this
+)
 
 // Sendable reports whether rows of this kind are sent.
 func (k Kind) Sendable() bool { return k == KindOK || k == KindUnverified }
@@ -84,13 +65,14 @@ type Row struct {
 
 // Scan reads an Excel document from r and calls fn once for every non-empty
 // data row, in spreadsheet order, with the row's syntax check already done
-// (KindOK, KindEmptyEmail, KindEmptyName, KindInvalidEmail or KindDuplicate;
-// domain checks are the caller's job).
+// (KindOK, KindEmptyEmail, KindEmptyName or KindInvalidEmail; domain checks
+// are the caller's job).
 //
 // Concept: streaming. Rows are read one at a time (excelize's Rows iterator)
-// instead of loading the whole sheet first (GetRows), so memory no longer
-// grows with every row: only the set of emails seen so far is kept, which
-// the duplicate check needs. If fn returns an error, Scan stops and returns it.
+// instead of loading the whole sheet first (GetRows), and nothing is kept
+// per row, so memory does not grow with the number of rows. (excelize still
+// holds the compressed file and its shared-strings table while reading.)
+// If fn returns an error, Scan stops and returns it.
 func Scan(r io.Reader, fn func(Row) error) error {
 	// OpenReader unzips the .xlsx (a zip of XML files). Big sheets are unpacked
 	// to a temporary file rather than memory (excelize's UnzipXMLSizeLimit).
@@ -127,13 +109,12 @@ func Scan(r io.Reader, fn func(Row) error) error {
 		return ErrMissingColumns
 	}
 
-	seen := make(map[string]struct{})
 	for rowNum := 2; rows.Next(); rowNum++ {
 		row, err := rows.Columns()
 		if err != nil {
 			return fmt.Errorf("read row %d: %w", rowNum, err)
 		}
-		r := checkRow(rowNum, cell(row, nameCol), cell(row, emailCol), seen)
+		r := checkRow(rowNum, cell(row, nameCol), cell(row, emailCol))
 		if r.Kind == "" { // fully empty row (common at the bottom of a sheet): not an error
 			continue
 		}
@@ -149,7 +130,8 @@ func Scan(r io.Reader, fn func(Row) error) error {
 
 // checkRow applies the per-row rules. A row with no name and no email comes
 // back with an empty Kind, meaning "skip silently".
-func checkRow(rowNum int, name, email string, seen map[string]struct{}) Row {
+func checkRow(rowNum int, name, email string) Row {
+	name, email = truncate(name, maxNameLen), truncate(email, maxStoreLen)
 	r := Row{Num: rowNum, Name: name, Email: email}
 	switch {
 	case name == "" && email == "":
@@ -160,57 +142,26 @@ func checkRow(rowNum int, name, email string, seen map[string]struct{}) Row {
 		// Policy choice: we require a name. If you'd rather email people
 		// without one, remove this check and use a fallback greeting.
 		r.Kind, r.Reason = KindEmptyName, "name is empty"
-	case !validEmail(email):
+	case len(email) > maxEmailLen || !validEmail(email):
 		r.Kind, r.Reason = KindInvalidEmail, fmt.Sprintf("invalid email %q", email)
 	default:
-		// Email addresses are case-insensitive in practice, so compare lowercase.
+		// Email addresses are case-insensitive in practice; store them lowercase.
 		r.Email = strings.ToLower(email)
-		if _, dup := seen[r.Email]; dup {
-			r.Kind, r.Reason = KindDuplicate, fmt.Sprintf("duplicate email %q", r.Email)
-		} else {
-			seen[r.Email] = struct{}{}
-			r.Kind = KindOK
-		}
+		r.Kind = KindOK
 	}
 	return r
 }
 
-// ParseExcel reads path and returns the usable recipients plus the rows that
-// were rejected.
-//
-// Concept: two kinds of problems are reported in two different ways.
-//   - Problems with the FILE (can't open it, wrong headers) -> the returned `error`.
-//     Nothing can be done, so the caller stops.
-//   - Problems with a ROW (empty email, bad format, duplicate) -> the []RowError.
-//     The caller can still send to the valid recipients and show the user the rest.
-func ParseExcel(path string) ([]Recipient, []RowError, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		// %w wraps the original error so callers can still inspect it with
-		// errors.Is / errors.As, while we add context about what we were doing.
-		return nil, nil, fmt.Errorf("open excel file: %w", err)
+// truncate cuts s to at most n characters (runes, so a letter is never split).
+func truncate(s string, n int) string {
+	if len(s) <= n { // bytes >= runes, so this is a cheap common-case exit
+		return s
 	}
-	defer f.Close()
-	return ParseExcelReader(f)
-}
-
-// ParseExcelReader reads an Excel document from r and returns the usable recipients
-// plus the rows that were rejected. It collects what Scan reports.
-func ParseExcelReader(r io.Reader) ([]Recipient, []RowError, error) {
-	valid := make([]Recipient, 0)
-	problems := make([]RowError, 0)
-	err := Scan(r, func(row Row) error {
-		if row.Kind == KindOK {
-			valid = append(valid, Recipient{Name: row.Name, Email: row.Email, Row: row.Num})
-		} else {
-			problems = append(problems, RowError{Row: row.Num, Name: row.Name, Email: row.Email, Reason: row.Reason})
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, nil, err
+	r := []rune(s)
+	if len(r) <= n {
+		return s
 	}
-	return valid, problems, nil
+	return string(r[:n])
 }
 
 // findColumns returns the index of the "name" and "email" columns in the
