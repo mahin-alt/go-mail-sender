@@ -204,9 +204,15 @@ func (w *Worker) process(ctx context.Context, job *store.ImportJob) {
 	case err == nil && stats.rows == 0 && job.LastProcessedRow == 0:
 		log.Warn("import failed: the file has no data rows")
 	case err == nil:
+		total := time.Since(start)
+		parseTime := max(total-stats.dnsTime-stats.dbInsertTime, 0)
 		log.Info("import finished", "rows", stats.rows, "chunk_size", stats.chunkSize, "resumed_after_row", job.LastProcessedRow,
-			"domain_lookups", stats.lookups, "took", time.Since(start).Round(time.Millisecond),
-			"rate", fmt.Sprintf("%.0f rows/s", float64(stats.rows)/max(time.Since(start).Seconds(), 0.001)))
+			"domain_lookups", stats.lookups,
+			"parse_time", parseTime.Round(time.Millisecond),
+			"dns_time", stats.dnsTime.Round(time.Millisecond),
+			"db_insert_time", stats.dbInsertTime.Round(time.Millisecond),
+			"took", total.Round(time.Millisecond),
+			"rate", fmt.Sprintf("%.0f rows/s", float64(stats.rows)/max(total.Seconds(), 0.001)))
 	case leaseLost.Load() || errors.Is(err, store.ErrLeaseLost):
 		log.Warn("import taken over by another worker; stopping")
 	case ctx.Err() != nil: // shutting down: hand the task back, attempt refunded
@@ -230,7 +236,10 @@ func (w *Worker) process(ctx context.Context, job *store.ImportJob) {
 	}
 }
 
-type importStats struct{ rows, lookups, chunkSize int }
+type importStats struct {
+	rows, lookups, chunkSize int
+	dnsTime, dbInsertTime    time.Duration
+}
 
 // importFile reads the batch's file from the checkpoint on and saves it in
 // chunks. Rows up to job.LastProcessedRow are read but skipped: they were
@@ -257,7 +266,9 @@ func (w *Worker) importFile(ctx context.Context, job *store.ImportJob) (importSt
 	lastRow := job.LastProcessedRow
 	var saveErr error
 	flush := func(done bool) error {
+		flushStart := time.Now()
 		err := w.store.SaveImportChunk(ctx, job, w.id, store.ImportChunk{Rows: chunk, LastRow: lastRow, Done: done})
+		st.dbInsertTime += time.Since(flushStart)
 		if err != nil {
 			saveErr = err
 			return err
@@ -281,7 +292,9 @@ func (w *Worker) importFile(ctx context.Context, job *store.ImportJob) (importSt
 			domain := r.Email[strings.LastIndex(r.Email, "@")+1:]
 			res, seen := domainResults[domain]
 			if !seen {
+				dnsStart := time.Now()
 				res = w.domains.Check(ctx, domain)
+				st.dnsTime += time.Since(dnsStart)
 				domainResults[domain] = res
 				st.lookups++
 			}

@@ -13,6 +13,7 @@ Status: `proposed` -> `next` -> `in progress` -> `done` (or `deferred`).
 | Structured logging | done (essentials) | [features/logging.md](features/logging.md), [decisions/0012](decisions/0012-structured-logging-slog.md) | branch `feat/structured-logging`; slog, `LOG_*` in `.env`, `logs/server.log`, request log, masked addresses |
 | Cancel a Bulk Email | done | [features/cancel-batch.md](features/cancel-batch.md) | branch `feat/cancel-batch`; `cancelled` job and batch status, `POST /batches/{id}/cancel`, Cancel button; migration 00004 adds status CHECKs |
 | Configurable chunk sizes | done | [features/configurable-chunk-sizes.md](features/configurable-chunk-sizes.md) | `IMPORT_CHUNK_SIZE` (default 1,000, max 50,000) and `JOB_GENERATION_CHUNK_SIZE` (default 5,000, max 100,000) configurable in `.env` and Settings UI (`ApplyInstant`) |
+| Operation timing logs | done | [features/operation-timing-logs.md](features/operation-timing-logs.md) | branch `feat/operation-timing-logs`; fine-grained timings in `import finished` (`parse_time`, `dns_time`, `db_insert_time`) and `email sent` (`claim`, `render`, `send`, `db_mark`, `queued`) |
 | Failures endpoint + stuck-job recovery | next | (no doc yet) | cross-batch failed list grouped by reason; requeue jobs stuck in `processing` (also Phase 3 of the large-upload plan); maybe a `failed_at` column |
 | Templates | proposed | (no doc yet) | saved subject/body templates, picked in the New Bulk Email wizard |
 | Recipients search | proposed | (no doc yet) | "did merchant X get the notice?" |

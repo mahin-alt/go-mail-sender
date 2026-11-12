@@ -127,7 +127,9 @@ func (p *Pool) runWorker(id int) {
 		}
 
 		// 2. Try to claim the next email using FOR UPDATE SKIP LOCKED.
+		claimStart := time.Now()
 		job, err := p.store.ClaimNextJob(p.ctx, workerID)
+		claimTime := time.Since(claimStart).Round(time.Millisecond)
 		if err != nil {
 			wait := p.pollInterval
 			if !errors.Is(err, store.ErrNoJobs) {
@@ -148,7 +150,7 @@ func (p *Pool) runWorker(id int) {
 
 		// 3. Send it. The send itself is not cut short by shutdown: an email
 		// in flight finishes and its result is recorded.
-		p.processJob(workerID, job)
+		p.processJob(workerID, job, claimTime)
 	}
 }
 
@@ -179,12 +181,14 @@ func (p *Pool) runReaper() {
 // Logging levels: a successful send is DEBUG (a 1M-row batch would otherwise
 // write a million lines), a retry is WARN, a final failure is ERROR, and a
 // finished batch gets one INFO summary. Addresses are masked.
-func (p *Pool) processJob(workerID string, job *store.Job) {
+func (p *Pool) processJob(workerID string, job *store.Job, claimTime time.Duration) {
 	to := logging.MaskEmail(job.Email)
 	ctx := context.Background()
 	log := slog.With("job_id", job.ID, "batch_id", job.BatchID, "worker", workerID, "to", to, "attempt", job.Attempts)
 
+	renderStart := time.Now()
 	subject, body, err := render(job)
+	renderTime := time.Since(renderStart).Round(time.Microsecond)
 	if err != nil {
 		// The templates were checked when Send was clicked; if one still fails
 		// for this recipient, retrying will not help.
@@ -208,14 +212,16 @@ func (p *Pool) processJob(workerID string, job *store.Job) {
 		return
 	}
 
+	markStart := time.Now()
 	done, err := p.store.MarkJobSent(ctx, job.ID, workerID)
+	dbMarkTime := time.Since(markStart).Round(time.Millisecond)
 	if err != nil {
 		// The email went out but stays 'processing'; the reaper requeues it
 		// later, so the recipient may get it twice (at-least-once delivery).
 		log.Error("mark job sent failed", "err", err)
 		return
 	}
-	log.Debug("email sent", "send", sendTime, "queued", job.QueuedFor)
+	log.Debug("email sent", "claim", claimTime, "render", renderTime, "send", sendTime, "db_mark", dbMarkTime, "queued", job.QueuedFor)
 	if done {
 		p.logBatchCompleted(ctx, job.BatchID)
 	}

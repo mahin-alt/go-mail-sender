@@ -124,17 +124,18 @@ The server logs with Go's built-in `log/slog`: every line has a level and `key=v
 Changing them needs a restart. Read the file with `tail -f logs/server.log`, or `grep level=ERROR logs/server.log`.
 
 ```
-level=INFO  msg="recipients parsed" valid=780493 problems=169547 unverified=0 parse=6.191s domain_check=467ms total=6.707s
-level=INFO  msg="batch created" batch_id=1 filename=9_mixed_everything.xlsx pending=3 invalid=5 unverified=0 parse=1ms domain_check=0s render=0s insert=4ms total=5ms
+level=INFO  msg="upload received" batch_id=1 type=bulk_send filename=9_mixed_everything.xlsx took=5ms
+level=INFO  msg="import finished" batch_id=1 import_job=1 attempt=1 rows=8 chunk_size=1000 resumed_after_row=0 domain_lookups=4 parse_time=1ms dns_time=2ms db_insert_time=3ms took=6ms rate=1333 rows/s
+level=INFO  msg="emails created; batch queued for sending" batch_id=1 attempt=1 created=4 chunk_size=5000 took=4ms
 level=INFO  msg=request req_id=6ecc38cf method=POST path=/api/v1/batches status=202 duration=5ms
-level=DEBUG msg="email sent" job_id=1 batch_id=1 to=a***@example.com worker=4 send=3ms queued=4ms
+level=DEBUG msg="email sent" job_id=1 batch_id=1 to=a***@example.com worker=host-4 claim=1ms render=35µs send=3ms db_mark=1ms queued=4ms
 level=INFO  msg="batch completed" batch_id=1 filename=9_mixed_everything.xlsx sent=3 failed=0 invalid=5 duration=16ms rate=191.1/s
-level=WARN  msg=request req_id=e2da5ecd method=POST path=/api/v1/uploads status=413 duration=30ms
+level=WARN  msg=request req_id=e2da5ecd method=POST path=/api/v1/batches status=413 duration=30ms
 ```
 
 - **Request log:** one line per API call (not `/healthz`). 5xx is ERROR, 4xx WARN; successful POST/PUT/DELETE are INFO; successful GET/HEAD and CORS preflights are DEBUG (the dashboard polls every few seconds). The same `req_id` is returned in the `X-Request-ID` response header, so a failed request seen in the browser can be found in the log.
-- **Timings (INFO):** `recipients parsed` and `batch created` split the upload into `parse`, `domain_check`, `render`, `insert` and `total`; `batch completed` gives `duration` (upload to last email) and `rate` (emails handled per second).
-- **Emails:** a send is DEBUG with `send` (SMTP time) and `queued` (how long it waited for a worker); a retry is WARN and a final failure ERROR, both with `send`. Addresses are masked (`a***@gmail.com`).
+- **Timings (INFO):** `upload received` logs `took` (disk save); `import finished` splits the background import into `parse_time`, `dns_time`, `db_insert_time`, `took` and `rate`; `emails created` logs `took` and `chunk_size`; `batch completed` gives `duration` (Send click to last email) and `rate` (emails handled per second).
+- **Emails:** a send is DEBUG with `claim` (DB job claim), `render` (template execution), `send` (SMTP time), `db_mark` (DB result & counter update) and `queued` (how long it waited for a worker); a retry is WARN and a final failure ERROR, both with `send`. Addresses are masked (`a***@gmail.com`).
 - **Never logged:** passwords and other secrets, full email addresses, email bodies.
 - **No rotation yet:** the file grows until you delete it (a restart appends). In production prefer `LOG_FILE=` empty and let systemd or Docker keep the logs.
 
