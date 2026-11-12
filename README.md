@@ -6,7 +6,7 @@ Data model (decision [0013](docs/decisions/0013-four-table-data-model.md)): one 
 
 ## Features
 
-- **Background import**: The upload streams the file to disk and answers `202` at once; a worker reads it row by row in chunks of 1,000, each saved with a checkpoint, so a crash resumes where it stopped. 950k rows import in about 17 seconds with the whole server under 70 MB.
+- **Background import**: The upload streams the file to disk and answers `202` at once; a worker reads it row by row in configurable chunks (`IMPORT_CHUNK_SIZE`, default 1,000), each saved with a checkpoint, so a crash resumes where it stopped. 950k rows import in about 17 seconds with the whole server under 70 MB.
 - **Verify first, send later**: A checked file is a batch on the server; it can be sent later without uploading again.
 - **Row checks**: Format, empty name/email, and an optional DNS/MX domain check. Duplicate addresses are sent like any other row.
 - **Personalized Templating**: Uses Go's `text/template` engine to customize subjects and bodies with `{{.Name}}` and `{{.Email}}`.
@@ -243,7 +243,7 @@ Set `AUTO_MIGRATE=false` to run migrations as a separate step before starting th
 
 Certificates are verified against the system trust store. To trust a private CA or a self-signed certificate in development, point `SSL_CERT_FILE` at it.
 
-**Settings overrides.** Selected env settings can be changed from the dashboard (`/api/v1/settings`). Saved values are stored in the `app_settings` table and override the environment; resetting a setting deletes the override. SMTP, sender, domain check, retry and upload size (`MAX_UPLOAD_MB`) settings apply instantly; worker count, pool size and poll interval are saved but reported with `restart_required` until the server restarts. `DATABASE_URL` and the HTTP address/timeouts are never editable.
+**Settings overrides.** Selected env settings can be changed from the dashboard (`/api/v1/settings`). Saved values are stored in the `app_settings` table and override the environment; resetting a setting deletes the override. SMTP, sender, domain check, retry, upload size (`MAX_UPLOAD_MB`), and chunk size (`IMPORT_CHUNK_SIZE`, `JOB_GENERATION_CHUNK_SIZE`) settings apply instantly; worker count, pool size and poll interval are saved but reported with `restart_required` until the server restarts. `DATABASE_URL` and the HTTP address/timeouts are never editable.
 
 **Upload size.** `MAX_UPLOAD_MB` (default 10, allowed 1-50) is the largest spreadsheet both upload endpoints accept; larger files get `413 {"error":"file too large: the limit is N MB"}`. It can be changed on the Settings page without a restart; uploads already in progress keep the limit they started with. The ceiling exists because the spreadsheet library holds the compressed file and its shared-text table in memory while reading. The upload itself is streamed to disk.
 

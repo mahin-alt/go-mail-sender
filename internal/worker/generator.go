@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sendmail/internal/store"
@@ -30,7 +31,8 @@ type Generator struct {
 	pollInterval time.Duration
 	onQueued     func() // wakes the sending pool
 
-	ChunkSize int
+	ChunkSize int // optional test override; production uses SetChunkSize
+	chunkSize atomic.Int64
 	Lease     time.Duration
 
 	id     string
@@ -46,12 +48,33 @@ func NewGenerator(st *store.Store, pollInterval time.Duration, onQueued func()) 
 		pollInterval = time.Second
 	}
 	host, _ := os.Hostname()
-	return &Generator{
+	g := &Generator{
 		store: st, pollInterval: pollInterval, onQueued: onQueued,
-		ChunkSize: DefaultGenerationChunk, Lease: DefaultGenerationLease,
-		id:   fmt.Sprintf("%s:%d:generate", host, os.Getpid()),
-		wake: make(chan struct{}, 1),
+		Lease: DefaultGenerationLease,
+		id:    fmt.Sprintf("%s:%d:generate", host, os.Getpid()),
+		wake:  make(chan struct{}, 1),
 	}
+	g.chunkSize.Store(DefaultGenerationChunk)
+	return g
+}
+
+// SetChunkSize sets how many email jobs each generation transaction creates.
+// Runs already in progress keep the chunk size they started with. Values below
+// 1 are ignored.
+func (g *Generator) SetChunkSize(n int) {
+	if n > 0 {
+		g.chunkSize.Store(int64(n))
+	}
+}
+
+func (g *Generator) effectiveChunkSize() int {
+	if g.ChunkSize > 0 {
+		return g.ChunkSize
+	}
+	if n := int(g.chunkSize.Load()); n > 0 {
+		return n
+	}
+	return DefaultGenerationChunk
 }
 
 // Wake makes an idle generator look for work now.
@@ -117,6 +140,7 @@ func (g *Generator) RunOnce(ctx context.Context) (bool, error) {
 	}
 
 	start := time.Now()
+	chunkSize := g.effectiveChunkSize()
 	created := 0
 	for {
 		if ctx.Err() != nil { // shutting down: the checkpoint is saved, resume later
@@ -124,7 +148,7 @@ func (g *Generator) RunOnce(ctx context.Context) (bool, error) {
 			log.Info("job generation paused for shutdown", "created_this_run", created)
 			return true, nil
 		}
-		n, done, err := g.store.GenerateChunk(ctx, task, g.id, g.ChunkSize)
+		n, done, err := g.store.GenerateChunk(ctx, task, g.id, chunkSize)
 		if errors.Is(err, store.ErrLeaseLost) {
 			log.Warn("job generation stopped: batch cancelled or taken over")
 			return true, nil
@@ -136,7 +160,7 @@ func (g *Generator) RunOnce(ctx context.Context) (bool, error) {
 		}
 		created += n
 		if done {
-			log.Info("emails created; batch queued for sending", "created", created,
+			log.Info("emails created; batch queued for sending", "created", created, "chunk_size", chunkSize,
 				"took", time.Since(start).Round(time.Millisecond))
 			if g.onQueued != nil {
 				g.onQueued()

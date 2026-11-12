@@ -97,6 +97,18 @@ var catalog = []def{
 		set:   func(c *config.Config, v string) { c.MaxUploadMB, _ = strconv.Atoi(v) },
 	},
 	{
+		key: "IMPORT_CHUNK_SIZE", desc: "Spreadsheet rows saved per database transaction during background import", kind: "int", apply: ApplyInstant,
+		parse: intRange("IMPORT_CHUNK_SIZE", 1, config.MaxImportChunkSize),
+		get:   func(c config.Config) string { return strconv.Itoa(c.ImportChunkSize) },
+		set:   func(c *config.Config, v string) { c.ImportChunkSize, _ = strconv.Atoi(v) },
+	},
+	{
+		key: "JOB_GENERATION_CHUNK_SIZE", desc: "Email jobs created per database transaction after Send", kind: "int", apply: ApplyInstant,
+		parse: intRange("JOB_GENERATION_CHUNK_SIZE", 1, config.MaxJobGenerationChunkSize),
+		get:   func(c config.Config) string { return strconv.Itoa(c.JobGenerationChunkSize) },
+		set:   func(c *config.Config, v string) { c.JobGenerationChunkSize, _ = strconv.Atoi(v) },
+	},
+	{
 		key: "WORKER_COUNT", desc: "Background workers sending emails in parallel", kind: "int", apply: ApplyRestart,
 		parse: intRange("WORKER_COUNT", 1, 100),
 		get:   func(c config.Config) string { return strconv.Itoa(c.WorkerCount) },

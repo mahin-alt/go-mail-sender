@@ -27,6 +27,43 @@ func TestLoad_MaxUploadMB(t *testing.T) {
 	}
 }
 
+func TestLoad_ChunkSizes(t *testing.T) {
+	cases := []struct {
+		key     string
+		env     string
+		want    int
+		wantErr bool
+		pick    func(Config) int
+	}{
+		{"IMPORT_CHUNK_SIZE", "", DefaultImportChunkSize, false, func(c Config) int { return c.ImportChunkSize }},
+		{"IMPORT_CHUNK_SIZE", "2500", 2500, false, func(c Config) int { return c.ImportChunkSize }},
+		{"IMPORT_CHUNK_SIZE", "50000", 50000, false, func(c Config) int { return c.ImportChunkSize }},
+		{"IMPORT_CHUNK_SIZE", "0", DefaultImportChunkSize, false, func(c Config) int { return c.ImportChunkSize }},
+		{"IMPORT_CHUNK_SIZE", "abc", DefaultImportChunkSize, false, func(c Config) int { return c.ImportChunkSize }},
+		{"IMPORT_CHUNK_SIZE", "50001", 0, true, func(c Config) int { return c.ImportChunkSize }},
+		{"JOB_GENERATION_CHUNK_SIZE", "", DefaultJobGenerationChunkSize, false, func(c Config) int { return c.JobGenerationChunkSize }},
+		{"JOB_GENERATION_CHUNK_SIZE", "10000", 10000, false, func(c Config) int { return c.JobGenerationChunkSize }},
+		{"JOB_GENERATION_CHUNK_SIZE", "100000", 100000, false, func(c Config) int { return c.JobGenerationChunkSize }},
+		{"JOB_GENERATION_CHUNK_SIZE", "0", DefaultJobGenerationChunkSize, false, func(c Config) int { return c.JobGenerationChunkSize }},
+		{"JOB_GENERATION_CHUNK_SIZE", "lots", DefaultJobGenerationChunkSize, false, func(c Config) int { return c.JobGenerationChunkSize }},
+		{"JOB_GENERATION_CHUNK_SIZE", "100001", 0, true, func(c Config) int { return c.JobGenerationChunkSize }},
+	}
+	for _, c := range cases {
+		t.Run(c.key+"="+c.env, func(t *testing.T) {
+			t.Setenv("IMPORT_CHUNK_SIZE", "")
+			t.Setenv("JOB_GENERATION_CHUNK_SIZE", "")
+			t.Setenv(c.key, c.env)
+			cfg, err := Load()
+			if (err != nil) != c.wantErr {
+				t.Fatalf("%s=%q: err = %v, wantErr %v", c.key, c.env, err, c.wantErr)
+			}
+			if err == nil && c.pick(cfg) != c.want {
+				t.Errorf("%s=%q: got %d, want %d", c.key, c.env, c.pick(cfg), c.want)
+			}
+		})
+	}
+}
+
 func TestLoad_Logging(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "WARN")
 	t.Setenv("LOG_FORMAT", "json")

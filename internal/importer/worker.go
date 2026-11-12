@@ -46,7 +46,8 @@ type Worker struct {
 	domainsOn    atomic.Bool   // the Settings switch
 	pollInterval time.Duration
 
-	ChunkSize int
+	ChunkSize int // optional test override; production uses SetChunkSize
+	chunkSize atomic.Int64
 	Lease     time.Duration
 
 	id     string
@@ -66,12 +67,32 @@ func NewWorker(st Store, files Files, domains DomainChecker, pollInterval time.D
 	host, _ := os.Hostname()
 	w := &Worker{
 		store: st, files: files, domains: domains, pollInterval: pollInterval,
-		ChunkSize: DefaultChunkSize, Lease: DefaultLease,
-		id:   fmt.Sprintf("%s:%d:import-%s", host, os.Getpid(), randomID()),
-		wake: make(chan struct{}, 1),
+		Lease: DefaultLease,
+		id:    fmt.Sprintf("%s:%d:import-%s", host, os.Getpid(), randomID()),
+		wake:  make(chan struct{}, 1),
 	}
+	w.chunkSize.Store(DefaultChunkSize)
 	w.domainsOn.Store(domains != nil)
 	return w
+}
+
+// SetChunkSize sets how many rows each import transaction saves. Imports
+// already in progress keep the chunk size they started with. Values below 1
+// are ignored.
+func (w *Worker) SetChunkSize(n int) {
+	if n > 0 {
+		w.chunkSize.Store(int64(n))
+	}
+}
+
+func (w *Worker) effectiveChunkSize() int {
+	if w.ChunkSize > 0 {
+		return w.ChunkSize
+	}
+	if n := int(w.chunkSize.Load()); n > 0 {
+		return n
+	}
+	return DefaultChunkSize
 }
 
 // SetDomainCheckEnabled switches the domain check on or off; it applies to
@@ -183,7 +204,7 @@ func (w *Worker) process(ctx context.Context, job *store.ImportJob) {
 	case err == nil && stats.rows == 0 && job.LastProcessedRow == 0:
 		log.Warn("import failed: the file has no data rows")
 	case err == nil:
-		log.Info("import finished", "rows", stats.rows, "resumed_after_row", job.LastProcessedRow,
+		log.Info("import finished", "rows", stats.rows, "chunk_size", stats.chunkSize, "resumed_after_row", job.LastProcessedRow,
 			"domain_lookups", stats.lookups, "took", time.Since(start).Round(time.Millisecond),
 			"rate", fmt.Sprintf("%.0f rows/s", float64(stats.rows)/max(time.Since(start).Seconds(), 0.001)))
 	case leaseLost.Load() || errors.Is(err, store.ErrLeaseLost):
@@ -209,13 +230,15 @@ func (w *Worker) process(ctx context.Context, job *store.ImportJob) {
 	}
 }
 
-type importStats struct{ rows, lookups int }
+type importStats struct{ rows, lookups, chunkSize int }
 
 // importFile reads the batch's file from the checkpoint on and saves it in
 // chunks. Rows up to job.LastProcessedRow are read but skipped: they were
 // saved by an earlier attempt.
 func (w *Worker) importFile(ctx context.Context, job *store.ImportJob) (importStats, error) {
+	chunkSize := w.effectiveChunkSize()
 	var st importStats
+	st.chunkSize = chunkSize
 	f, err := os.Open(w.files.Path(job.BatchID))
 	if errors.Is(err, os.ErrNotExist) {
 		return st, fileError{"the uploaded file is missing on the server"}
@@ -230,7 +253,7 @@ func (w *Worker) importFile(ctx context.Context, job *store.ImportJob) (importSt
 	checkDomains := w.domains != nil && w.domainsOn.Load()
 	domainResults := map[string]domaincheck.Result{} // each domain looked up once per import
 
-	chunk := make([]store.ImportRow, 0, w.ChunkSize)
+	chunk := make([]store.ImportRow, 0, chunkSize)
 	lastRow := job.LastProcessedRow
 	var saveErr error
 	flush := func(done bool) error {
@@ -271,7 +294,7 @@ func (w *Worker) importFile(ctx context.Context, job *store.ImportJob) (importSt
 		}
 		chunk = append(chunk, toImportRow(r))
 		lastRow = r.Num
-		if len(chunk) >= w.ChunkSize {
+		if len(chunk) >= chunkSize {
 			return flush(false)
 		}
 		return nil

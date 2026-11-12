@@ -117,11 +117,14 @@ func main() {
 		smtpPool     *mailer.Pool
 		handler      *api.Handler
 		importWorker *importer.Worker
+		generator    *worker.Generator
 	)
 	settingsSvc := settings.New(st, cfg, encKey, func(c config.Config) {
 		smtpPool.Reconfigure(c)
 		st.SetMaxAttempts(c.MaxJobRetries)
 		importWorker.SetDomainCheckEnabled(c.DomainCheckEnabled)
+		importWorker.SetChunkSize(c.ImportChunkSize)
+		generator.SetChunkSize(c.JobGenerationChunkSize)
 		handler.SetMaxUploadMB(c.MaxUploadMB)
 	})
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -153,7 +156,8 @@ func main() {
 	workerPool.Start(workerCtx)
 
 	// 5b. Job generator: after Send, creates the email jobs, then wakes the senders.
-	generator := worker.NewGenerator(st, time.Second, workerPool.Wake)
+	generator = worker.NewGenerator(st, time.Second, workerPool.Wake)
+	generator.SetChunkSize(cfg.JobGenerationChunkSize)
 	generator.Start(workerCtx)
 
 	// 5c. Import worker: reads uploaded spreadsheets from UPLOAD_DIR. The
@@ -162,6 +166,7 @@ func main() {
 	files := importer.Files{Dir: cfg.UploadDir}
 	importWorker = importer.NewWorker(st, files, domaincheck.NewChecker(net.DefaultResolver), time.Second)
 	importWorker.SetDomainCheckEnabled(cfg.DomainCheckEnabled)
+	importWorker.SetChunkSize(cfg.ImportChunkSize)
 	importWorker.Start(workerCtx)
 	if cfg.DomainCheckEnabled {
 		slog.Info("recipient domain (DNS/MX) check enabled")

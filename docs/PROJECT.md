@@ -48,6 +48,7 @@ A Go HTTP API (stdlib `net/http`) stores batches, their rows and their emails in
 
 ## Where things are
 
+- Every feature and use case in one list: [FEATURES.md](FEATURES.md)
 - How to run, API table, migration setup: [README.md](../README.md)
 - Feature plans and progress: [ROADMAP.md](ROADMAP.md)
 - Why we chose what we chose: [decisions/](decisions/)

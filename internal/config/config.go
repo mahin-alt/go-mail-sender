@@ -72,6 +72,14 @@ type Config struct {
 	// Parsing holds the whole sheet in memory, so it is capped at MaxUploadMBLimit.
 	MaxUploadMB int
 
+	// ImportChunkSize is how many recipient rows each background import
+	// transaction writes at once.
+	ImportChunkSize int
+
+	// JobGenerationChunkSize is how many email jobs each background
+	// generation transaction creates at once after Send.
+	JobGenerationChunkSize int
+
 	// UploadDir is the folder where uploaded spreadsheets are saved
 	// (batch-<id>.xlsx). The import worker reads them from there, also after
 	// a restart, so it must survive restarts (not /tmp on some systems).
@@ -113,6 +121,14 @@ const (
 	MaxUploadMBLimit   = 50
 )
 
+// Chunk size defaults and upper bounds for background import and job generation.
+const (
+	DefaultImportChunkSize        = 1000
+	MaxImportChunkSize            = 50000
+	DefaultJobGenerationChunkSize = 5000
+	MaxJobGenerationChunkSize     = 100000
+)
+
 // Load reads configuration from a .env file (if present) and the process
 // environment.
 func Load() (Config, error) {
@@ -140,6 +156,16 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("MAX_UPLOAD_MB %d is too large: the limit is %d", maxUploadMB, MaxUploadMBLimit)
 	}
 
+	importChunkSize := getEnvInt("IMPORT_CHUNK_SIZE", DefaultImportChunkSize)
+	if importChunkSize > MaxImportChunkSize {
+		return Config{}, fmt.Errorf("IMPORT_CHUNK_SIZE %d is too large: the limit is %d", importChunkSize, MaxImportChunkSize)
+	}
+
+	jobGenerationChunkSize := getEnvInt("JOB_GENERATION_CHUNK_SIZE", DefaultJobGenerationChunkSize)
+	if jobGenerationChunkSize > MaxJobGenerationChunkSize {
+		return Config{}, fmt.Errorf("JOB_GENERATION_CHUNK_SIZE %d is too large: the limit is %d", jobGenerationChunkSize, MaxJobGenerationChunkSize)
+	}
+
 	logLevel := strings.ToLower(getEnv("LOG_LEVEL", "info"))
 	switch logLevel {
 	case "debug", "info", "warn", "error":
@@ -165,12 +191,14 @@ func Load() (Config, error) {
 		HTTPReadTimeout:  getEnvDuration("HTTP_READ_TIMEOUT", 5*time.Minute),
 		HTTPWriteTimeout: getEnvDuration("HTTP_WRITE_TIMEOUT", 15*time.Minute),
 
-		WorkerCount:     getEnvInt("WORKER_COUNT", 3),
-		SMTPPoolSize:    getEnvInt("SMTP_POOL_SIZE", 3),
-		JobPollInterval: getEnvDuration("JOB_POLL_INTERVAL", 500*time.Millisecond),
-		MaxJobRetries:   getEnvInt("MAX_JOB_RETRIES", 3),
-		MaxUploadMB:     maxUploadMB,
-		UploadDir:       getEnv("UPLOAD_DIR", "data/uploads"),
+		WorkerCount:            getEnvInt("WORKER_COUNT", 3),
+		SMTPPoolSize:           getEnvInt("SMTP_POOL_SIZE", 3),
+		JobPollInterval:        getEnvDuration("JOB_POLL_INTERVAL", 500*time.Millisecond),
+		MaxJobRetries:          getEnvInt("MAX_JOB_RETRIES", 3),
+		MaxUploadMB:            maxUploadMB,
+		ImportChunkSize:        importChunkSize,
+		JobGenerationChunkSize: jobGenerationChunkSize,
+		UploadDir:              getEnv("UPLOAD_DIR", "data/uploads"),
 
 		DomainCheckEnabled: getEnvBool("DOMAIN_CHECK_ENABLED", true),
 

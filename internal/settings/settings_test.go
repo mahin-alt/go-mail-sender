@@ -24,6 +24,8 @@ func baseEnv() config.Config {
 	return config.Config{
 		SMTPHost: "localhost", SMTPPort: "1025", SMTPTLSMode: "auto",
 		MailFrom: "env@example.com", MaxJobRetries: 3, WorkerCount: 3, SMTPPoolSize: 3,
+		MaxUploadMB:     config.DefaultMaxUploadMB,
+		ImportChunkSize: config.DefaultImportChunkSize, JobGenerationChunkSize: config.DefaultJobGenerationChunkSize,
 		DomainCheckEnabled: true, HTTPAddr: ":8080", SMTPPassword: "env-password",
 	}
 }
@@ -110,6 +112,14 @@ func TestParsers(t *testing.T) {
 		{"MAX_UPLOAD_MB", "0", "", false},
 		{"MAX_UPLOAD_MB", "51", "", false},
 		{"MAX_UPLOAD_MB", "12.5", "", false},
+		{"IMPORT_CHUNK_SIZE", "2500", "2500", true},
+		{"IMPORT_CHUNK_SIZE", " 50000 ", "50000", true},
+		{"IMPORT_CHUNK_SIZE", "0", "", false},
+		{"IMPORT_CHUNK_SIZE", "50001", "", false},
+		{"JOB_GENERATION_CHUNK_SIZE", "10000", "10000", true},
+		{"JOB_GENERATION_CHUNK_SIZE", " 100000 ", "100000", true},
+		{"JOB_GENERATION_CHUNK_SIZE", "0", "", false},
+		{"JOB_GENERATION_CHUNK_SIZE", "100001", "", false},
 	}
 	for _, c := range cases {
 		d, ok := findDef(c.key)

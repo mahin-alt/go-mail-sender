@@ -303,3 +303,23 @@ func TestImport_GivesUpAfterMaxAttempts(t *testing.T) {
 		t.Fatalf("batch = %s %v", b.Status, b.ImportError)
 	}
 }
+
+func TestWorker_SetChunkSize(t *testing.T) {
+	w := NewWorker(nil, Files{}, nil, 0)
+	if got := w.effectiveChunkSize(); got != DefaultChunkSize {
+		t.Fatalf("default chunk size = %d, want %d", got, DefaultChunkSize)
+	}
+	w.SetChunkSize(0)
+	w.SetChunkSize(-5)
+	if got := w.effectiveChunkSize(); got != DefaultChunkSize {
+		t.Fatalf("non-positive SetChunkSize changed chunk size to %d", got)
+	}
+	w.SetChunkSize(250)
+	if got := w.effectiveChunkSize(); got != 250 {
+		t.Fatalf("chunk size = %d, want 250", got)
+	}
+	w.ChunkSize = 3
+	if got := w.effectiveChunkSize(); got != 3 {
+		t.Fatalf("test override ChunkSize = %d, want 3", got)
+	}
+}

@@ -73,3 +73,23 @@ func TestBackoff(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerator_SetChunkSize(t *testing.T) {
+	g := NewGenerator(nil, 0, nil)
+	if got := g.effectiveChunkSize(); got != DefaultGenerationChunk {
+		t.Fatalf("default chunk size = %d, want %d", got, DefaultGenerationChunk)
+	}
+	g.SetChunkSize(0)
+	g.SetChunkSize(-10)
+	if got := g.effectiveChunkSize(); got != DefaultGenerationChunk {
+		t.Fatalf("non-positive SetChunkSize changed chunk size to %d", got)
+	}
+	g.SetChunkSize(1200)
+	if got := g.effectiveChunkSize(); got != 1200 {
+		t.Fatalf("chunk size = %d, want 1200", got)
+	}
+	g.ChunkSize = 2
+	if got := g.effectiveChunkSize(); got != 2 {
+		t.Fatalf("test override ChunkSize = %d, want 2", got)
+	}
+}

@@ -18,6 +18,8 @@ func settingsRouter() http.Handler {
 	cfg := config.Config{
 		SMTPHost: "localhost", SMTPPort: "1025", SMTPTLSMode: "auto", MailFrom: "env@example.com",
 		SMTPPassword: "super-secret-pw", MaxJobRetries: 3, WorkerCount: 3, SMTPPoolSize: 3,
+		MaxUploadMB:     config.DefaultMaxUploadMB,
+		ImportChunkSize: config.DefaultImportChunkSize, JobGenerationChunkSize: config.DefaultJobGenerationChunkSize,
 	}
 	svc := settings.New(nil, cfg, nil, nil)
 	return NewRouter(NewHandler(&fakeMailer{}, nil, nil).WithSettings(svc))
@@ -87,7 +89,7 @@ func TestGetSettings_ListsItemsAndNeverLeaksSecrets(t *testing.T) {
 	if seen["DATABASE_URL"] {
 		t.Fatal("DATABASE_URL must not be listed")
 	}
-	for _, k := range []string{"MAIL_FROM", "SMTP_HOST", "SMTP_PASSWORD", "WORKER_COUNT", "HTTP_ADDR"} {
+	for _, k := range []string{"MAIL_FROM", "SMTP_HOST", "SMTP_PASSWORD", "IMPORT_CHUNK_SIZE", "JOB_GENERATION_CHUNK_SIZE", "WORKER_COUNT", "HTTP_ADDR"} {
 		if !seen[k] {
 			t.Errorf("missing %s", k)
 		}

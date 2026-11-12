@@ -41,6 +41,9 @@ const make = (): SettingItem[] => [
   },
   { ...base, key: 'SMTP_USERNAME', kind: 'string', value: 'apikey' },
   { ...base, key: 'SMTP_PASSWORD', kind: 'string', value: '', secret: true },
+  { ...base, key: 'MAX_UPLOAD_MB', kind: 'int', value: '10' },
+  { ...base, key: 'IMPORT_CHUNK_SIZE', kind: 'int', value: '1000' },
+  { ...base, key: 'JOB_GENERATION_CHUNK_SIZE', kind: 'int', value: '5000' },
   { ...base, key: 'DOMAIN_CHECK_ENABLED', kind: 'bool', value: 'true' },
   { ...base, key: 'MAX_JOB_RETRIES', kind: 'int', value: '3' },
   {
@@ -196,6 +199,23 @@ describe('Settings page', () => {
     await button(w, 'Save').trigger('click')
     await flushPromises()
     expect(api.updateSettings).toHaveBeenCalledWith({ values: { DOMAIN_CHECK_ENABLED: 'false' } })
+  })
+
+  it('shows and saves import and job generation chunk sizes in Sending behaviour', async () => {
+    api.updateSettings.mockResolvedValue(make())
+    const w = await mountPage()
+    await tab(w, 'Sending').trigger('click')
+    expect((w.find('#setting-IMPORT_CHUNK_SIZE').element as HTMLInputElement).value).toBe('1000')
+    expect((w.find('#setting-JOB_GENERATION_CHUNK_SIZE').element as HTMLInputElement).value).toBe(
+      '5000',
+    )
+    await w.find('#setting-IMPORT_CHUNK_SIZE').setValue('2500')
+    await w.find('#setting-JOB_GENERATION_CHUNK_SIZE').setValue('10000')
+    await button(w, 'Save').trigger('click')
+    await flushPromises()
+    expect(api.updateSettings).toHaveBeenCalledWith({
+      values: { IMPORT_CHUNK_SIZE: '2500', JOB_GENERATION_CHUNK_SIZE: '10000' },
+    })
   })
 
   it('puts the server message under the field it names and keeps the edit', async () => {
